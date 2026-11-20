@@ -12,16 +12,20 @@ function popToggle(btn, pop, open) {
 
 function legendBuild() {
   const row = (icon, title, text) => h("div", { class: "lg-row" }, h("span", { class: "lg-ic" }, icon), h("div", {}, h("b", { text: title }), h("div", { class: "lg-t", text })));
-  const mini = (kind, mood) => { const s = h("span", { class: "lg-bot", style: { "--hue": "var(--s1)" } }); s.append(botSvg(kind, mood, false, "mini")); return s; };
+  const mini = (kind, mood, harness) => { const s = h("span", { class: "lg-bot", style: { "--hue": "var(--s1)" } }); s.append(botSvg(kind, mood, false, "mini", harness || "claude")); return s; };
   const prop = (p) => h("span", { class: "lg-prop" }, (() => { const sp = h("span", {}); sp.innerHTML = `<svg viewBox="0 0 30 30" width="26" height="26">${PROP[p]}</svg>`; return sp; })());
   return [
     h("h3", { text: "What you're looking at" }),
-    h("p", { class: "lg-t", text: "Each Claude session is a character. It sits in a room for the folder or repo it works in, and reports to you in the office at the top." }),
-    h("h4", { text: "Who they are" }),
-    row(mini("desktop", "happy"), "Headset", "A session in the Claude app."),
-    row(mini("background", "happy"), "Antenna", "A background agent. The prompt box can start, message and stop these."),
-    row(mini("scheduled", "happy"), "Nightcap", "A scheduled job, on the night shift."),
-    row(mini("helper", "work"), "Propeller cap", "A helper (subagent) working for the character above it."),
+    h("p", { class: "lg-t", text: "Each agent session is a character. It sits in a room for the folder or repo it works in, and reports to you in the office at the top." }),
+    h("h4", { text: "Agent Harnesses" }),
+    row(mini("desktop", "happy", "antigravity"), "Antigravity", "Zero-gravity floating, celestial orbit glow aura, futuristic sci-fi terminal / hovering tablet."),
+    row(mini("desktop", "happy", "codex"), "Codex / OpenAI", "Retro-futuristic cybernetic visor, green phosphor matrix terminal."),
+    row(mini("desktop", "happy", "claude"), "Claude", "Signature royal crown, cheerful companion pet, notebook and classic styling."),
+    h("h4", { text: "Roles & Modes" }),
+    row(mini("desktop", "happy", "claude"), "Headset", "A desktop session in the agent app."),
+    row(mini("background", "happy", "claude"), "Antenna", "A background agent. The prompt box can start, message and stop these."),
+    row(mini("scheduled", "happy", "claude"), "Nightcap", "A scheduled job, on the night shift."),
+    row(mini("helper", "work", "claude"), "Propeller cap", "A helper (subagent) working for the character above it."),
     h("h4", { text: "What they're doing" }),
     row(prop("type"), "Page", "Writing or editing files."),
     row(prop("read"), "Magnifier", "Reading or searching."),

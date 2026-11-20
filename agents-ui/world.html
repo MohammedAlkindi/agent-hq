@@ -105,10 +105,18 @@ header{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:14px
 .win .orb{position:absolute;width:12px;height:12px;border-radius:50%;top:7px;left:9px;background:var(--orb);box-shadow:0 0 8px var(--orb)}
 .win .cloud{position:absolute;top:20px;width:20px;height:7px;border-radius:6px;background:#fff;opacity:var(--cloud);animation:drift 26s linear infinite}
 @keyframes drift{from{left:-24px}to{left:66px}}
-body.day{--sky:linear-gradient(#8fc8f6,#cfe9ff);--orb:#ffd23f;--cloud:.9}
-body.dawn{--sky:linear-gradient(#f6b48f,#ffe2b8);--orb:#ffb347;--cloud:.7}
-body.dusk{--sky:linear-gradient(#5c4a8a,#f19a7a);--orb:#ffcf8a;--cloud:.5}
-body.night{--sky:radial-gradient(1px 1px at 40px 8px,#fff 50%,transparent),radial-gradient(1px 1px at 30px 26px,#fff 50%,transparent),radial-gradient(1px 1px at 50px 30px,#fff 50%,transparent),linear-gradient(#0f1a3a,#28356b);--orb:#e9eefc;--cloud:0}
+body, .room, .hq, .bldg, .win, .floor, .sign, .plank, .bench {
+  transition: background 1.4s cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 1.4s ease,
+              color 0.6s ease,
+              box-shadow 1.4s ease;
+}
+body.day{--sky:linear-gradient(#8fc8f6,#cfe9ff);--orb:#ffd23f;--cloud:.9;--office-ambient:radial-gradient(ellipse at 50% 0%,rgba(255,248,230,.55) 0%,transparent 75%)}
+body.dawn{--sky:linear-gradient(#f6b48f,#ffe2b8);--orb:#ffb347;--cloud:.7;--office-ambient:radial-gradient(ellipse at 50% 0%,rgba(255,190,140,.45) 0%,transparent 75%)}
+body.dusk{--sky:linear-gradient(#5c4a8a,#f19a7a);--orb:#ffcf8a;--cloud:.5;--office-ambient:radial-gradient(ellipse at 50% 0%,rgba(220,120,170,.4) 0%,transparent 75%)}
+body.night{--sky:radial-gradient(1px 1px at 40px 8px,#fff 50%,transparent),radial-gradient(1px 1px at 30px 26px,#fff 50%,transparent),radial-gradient(1px 1px at 50px 30px,#fff 50%,transparent),linear-gradient(#0f1a3a,#28356b);--orb:#e9eefc;--cloud:0;--office-ambient:radial-gradient(ellipse at 50% 0%,rgba(100,150,255,.22) 0%,transparent 75%)}
+.hq::before,.room::before{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--office-ambient);pointer-events:none;z-index:0}
+body.night .hq,body.night .room{box-shadow:0 6px 28px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.05)}
 .alert{margin:12px 12px 0 12px;font-size:12px;color:var(--ink);background:var(--surface);border:1px solid var(--grid);border-left:4px solid var(--crit);border-radius:8px;padding:5px 9px;max-width:calc(100% - 90px)}
 .alert.repo{border-left-color:var(--serious)}
 .crew{flex:1;display:flex;flex-wrap:wrap;align-items:flex-end;gap:4px 2px;padding:46px 10px 0}
@@ -169,13 +177,113 @@ body.night{--sky:radial-gradient(1px 1px at 40px 8px,#fff 50%,transparent),radia
 .c-laptop{fill:#3a3a42} .c-logo{fill:#c9ced8}
 .c-glow{fill:#bfe3ff;opacity:0}
 
+/* harness styling */
+/* 1. Antigravity */
+.harness-antigravity .c-rig{animation:zeroGFloat 3.6s ease-in-out infinite;transform-origin:50% 65%}
+.harness-antigravity .c-orbit-glow{fill:radial-gradient(circle,rgba(56,189,248,.35) 0%,transparent 70%);opacity:.85}
+.harness-antigravity .c-orbit-ring{fill:none;stroke:#38bdf8;stroke-width:1.8;stroke-dasharray:7 5;animation:orbitRotate 8s linear infinite;filter:drop-shadow(0 0 3px #38bdf8)}
+.harness-antigravity .c-orbit-sat{fill:#7dd3fc;animation:satPulse 2.4s ease-in-out infinite alternate}
+.harness-antigravity .c-stardust{fill:#bae6fd;animation:twinkle 2.2s ease-in-out infinite alternate}
+.harness-antigravity .c-stardust.s2{animation-delay:1.1s}
+.harness-antigravity .c-ag-halo{fill:none;stroke:#38bdf8;stroke-width:2.2;filter:drop-shadow(0 0 4px #0284c7);animation:haloFloat 3s ease-in-out infinite}
+.harness-antigravity .c-ag-core{fill:#38bdf8;filter:drop-shadow(0 0 4px #38bdf8);animation:pulseCore 1.8s ease-in-out infinite alternate}
+.harness-antigravity .c-shadow{animation:zeroGShadow 3.6s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+.c-holo-base{fill:#0369a1;stroke:#38bdf8;stroke-width:1}
+.c-holo-beam{fill:color-mix(in oklab,#0284c7 35%,transparent);opacity:.75;animation:beamFlicker 3s ease-in-out infinite}
+.c-holo-screen{fill:rgba(12,74,110,.78);stroke:#38bdf8;stroke-width:1.6;filter:drop-shadow(0 0 5px rgba(56,189,248,.65))}
+.c-holo-line{stroke:#bae6fd;stroke-width:1.6;stroke-linecap:round}
+.c-holo-line.l1{animation:lineScan 1.6s linear infinite}
+.c-holo-node{fill:#38bdf8;filter:drop-shadow(0 0 2px #fff)}
+.c-holo-tablet{animation:tabletHover 3.2s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+.c-tablet-frame{fill:#0f172a;stroke:#38bdf8;stroke-width:1.5}
+.c-tablet-screen{fill:rgba(2,132,199,.65)}
+.c-tablet-code{stroke:#bae6fd;stroke-width:1.4;stroke-linecap:round}
+.c-tablet-gem{fill:#38bdf8;filter:drop-shadow(0 0 3px #fff)}
+
+/* 2. Codex / OpenAI */
+.c-cyber-visor{fill:#071a0e;stroke:#00ff66;stroke-width:1.8;filter:drop-shadow(0 0 3px rgba(0,255,102,.8))}
+.c-visor-glint{stroke:#a3ffc7;stroke-width:1.4;stroke-dasharray:8 12;animation:matrixScan 2.2s linear infinite}
+.c-visor-led{fill:#00ff66;filter:drop-shadow(0 0 2px #00ff66);animation:ledBlink 1.4s steps(2) infinite}
+.c-visor-led.r{animation-delay:.7s}
+.c-crt-casing{fill:#1c2420;stroke:#2e3d34;stroke-width:1.5}
+.c-crt-screen{fill:#051309;stroke:#00dd55;stroke-width:1.4;filter:drop-shadow(0 0 4px rgba(0,255,102,.3))}
+.c-crt-code{stroke:#00ff66;stroke-width:1.6;stroke-dasharray:4 3;stroke-linecap:round;animation:matrixRain 1.4s steps(5) infinite}
+.c-crt-cursor{fill:#00ff66;animation:blinkc .9s steps(2) infinite}
+.c-crt-pwr{fill:#00ff66;filter:drop-shadow(0 0 2px #00ff66)}
+
+/* 3. Claude */
+.c-claude-crown .c-crown{fill:#f59e0b;stroke:#b45309;stroke-width:1.6;filter:drop-shadow(0 1px 2px rgba(180,83,9,.35))}
+.c-claude-crown .c-gem{fill:#ef4444}
+.c-claude-crown .c-gem.ruby{fill:#3b82f6}
+.c-sparkle-dot{fill:#fef08a;filter:drop-shadow(0 0 3px #fbbf24);animation:sparkle 2s ease-in-out infinite}
+.c-companion-pet{transform-box:fill-box;transform-origin:50% 100%;animation:petBob 3s ease-in-out infinite}
+.c-pet-body{fill:#ea580c}
+.c-pet-head{fill:#f97316}
+.c-pet-ear{fill:#c2410c}
+.c-pet-eye{fill:#1e293b}
+.c-pet-tail{fill:none;stroke:#ea580c;stroke-width:2.2;stroke-linecap:round;transform-box:fill-box;transform-origin:0% 100%;animation:petWag 1s ease-in-out infinite alternate}
+.c-note-cover{fill:#c2410c;stroke:#9a3412;stroke-width:1}
+.c-note-pages{fill:#fef3c7}
+.c-note-ribbon{stroke:#dc2626;stroke-width:1.5}
+
+/* office life & animations */
+.c-spark{fill:#ffd23f;filter:drop-shadow(0 0 2px #ffb703);transform-box:fill-box;transform-origin:center;opacity:0}
+.st-working .c-spark{animation:typingSparks .85s ease-out infinite}
+.st-working .c-spark.sp-2{animation-delay:.22s;fill:#60a5fa}
+.st-working .c-spark.sp-3{animation-delay:.44s;fill:#f43f5e}
+.st-working .c-spark.sp-4{animation-delay:.66s;fill:#34d399}
+@keyframes typingSparks{0%{transform:translateY(0) scale(0);opacity:0}35%{opacity:1;transform:translateY(-4px) scale(1.3)}100%{transform:translateY(-10px) scale(0);opacity:0}}
+
+.c-mug-body{fill:var(--frame2);stroke:var(--grid);stroke-width:1}
+.c-mug-handle{fill:none;stroke:var(--grid);stroke-width:1.5;stroke-linecap:round}
+.c-mug-steam{fill:none;stroke:var(--muted);stroke-width:1.3;stroke-linecap:round;opacity:0;transform-box:fill-box;transform-origin:bottom;animation:steamRise 3.2s ease-in-out infinite}
+.c-mug-steam.s2{animation-delay:1.6s}
+.c-coffee-mug{transform-box:fill-box;transform-origin:center;animation:sipMove 14s ease-in-out infinite}
+@keyframes steamRise{0%{transform:translateY(0);opacity:0}35%{opacity:.7}100%{transform:translateY(-8px);opacity:0}}
+@keyframes sipMove{0%,82%,100%{transform:translateY(0)}88%,94%{transform:translateY(-3.5px) rotate(6deg)}}
+
+.c-celebrate-stars{display:none}
+.st-finished .c-celebrate-stars,.st-waiting .c-celebrate-stars{display:block}
+.c-star{fill:#facc15;stroke:#ca8a04;stroke-width:.8;filter:drop-shadow(0 0 3px #fde047);transform-box:fill-box;transform-origin:center;animation:starFloat 2.6s ease-in-out infinite alternate}
+.c-star.star-2{animation-delay:1.3s;fill:#fb923c}
+.c-star-dot{fill:#60a5fa;animation:dotTwinkle 1.8s ease-in-out infinite alternate}
+.c-star-dot.d2{animation-delay:.9s;fill:#ec4899}
+@keyframes starFloat{0%{transform:translateY(0) scale(.85) rotate(0deg);opacity:.4}50%{opacity:1;transform:translateY(-5px) scale(1.15) rotate(15deg)}100%{transform:translateY(-9px) scale(.9) rotate(-10deg);opacity:.7}}
+@keyframes dotTwinkle{from{opacity:.2;transform:scale(.7)}to{opacity:1;transform:scale(1.3)}}
+
+.st-working.prop-think .bot,.st-working.prop-run .bot{animation:pacing 2.8s ease-in-out infinite alternate}
+@keyframes pacing{0%{transform:translateX(-4px)}50%{transform:translateX(4px)}100%{transform:translateX(-4px)}}
+
+.sweat{position:absolute;top:42px;left:18px;width:8px;height:11px;background:#38bdf8;border-radius:50% 50% 50% 50%/60% 60% 40% 40%;box-shadow:0 0 3px rgba(56,189,248,.6);animation:energeticDrop 1.2s ease-in infinite}
+@keyframes energeticDrop{0%{transform:translateY(0) scale(.7);opacity:0}25%{opacity:1}85%{transform:translateY(18px) scale(1);opacity:1}100%{transform:translateY(24px) scale(1.5,.3);opacity:0}}
+
+@keyframes zeroGFloat{0%,100%{transform:translateY(0px) rotate(0deg)}25%{transform:translateY(-7px) rotate(-1.5deg)}75%{transform:translateY(-3px) rotate(1.2deg)}}
+@keyframes zeroGShadow{0%,100%{transform:scale(1);opacity:.13}50%{transform:scale(.72);opacity:.06}}
+@keyframes orbitRotate{from{stroke-dashoffset:0}to{stroke-dashoffset:-48}}
+@keyframes satPulse{0%,100%{transform:scale(1);opacity:.7}50%{transform:scale(1.3);opacity:1;filter:drop-shadow(0 0 3px #fff)}}
+@keyframes twinkle{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}}
+@keyframes haloFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
+@keyframes pulseCore{from{opacity:.6;transform:scale(.9)}to{opacity:1;transform:scale(1.1)}}
+@keyframes beamFlicker{0%,100%{opacity:.7}50%{opacity:.9}}
+@keyframes lineScan{0%{stroke-dashoffset:0}100%{stroke-dashoffset:16}}
+@keyframes tabletHover{0%,100%{transform:translateY(0) rotate(0deg)}50%{transform:translateY(-5px) rotate(-2deg)}}
+@keyframes matrixScan{0%{transform:translateX(-6px);opacity:.4}50%{opacity:1}100%{transform:translateX(6px);opacity:.4}}
+@keyframes matrixRain{to{stroke-dashoffset:-14}}
+@keyframes ledBlink{50%{opacity:.2}}
+@keyframes petBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-2.5px) rotate(2deg)}}
+@keyframes petWag{from{transform:rotate(-12deg)}to{transform:rotate(16deg)}}
+@keyframes sparkle{0%,100%{opacity:.4;transform:scale(.8)}50%{opacity:1;transform:scale(1.4)}}
+
+/* chip badges */
+.chipx.harness{background:color-mix(in oklab,var(--accent) 15%,var(--chip));color:var(--accent);font-weight:600}
+
 /* motion: every part animates with transform-box so transforms stay local */
 .bot *{transform-box:fill-box}
 .c-rig{transform-origin:50% 100%}
 .c-eyes{transform-origin:50% 50%;animation:blink 5.5s infinite;animation-delay:var(--d,0s)}
 @keyframes blink{0%,94%,100%{transform:scaleY(1)}96%{transform:scaleY(.1)}}
 .c-arm{transform-origin:50% 0%}
-.st-working .c-rig{animation:bob 1.1s ease-in-out infinite}
+.st-working:not(.harness-antigravity) .c-rig{animation:bob 1.1s ease-in-out infinite}
 @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
 .st-working .c-arm.l{animation:tapL .32s ease-in-out infinite alternate}
 .st-working .c-arm.r{animation:tapR .32s ease-in-out infinite alternate}
@@ -186,7 +294,9 @@ body.night{--sky:radial-gradient(1px 1px at 40px 8px,#fff 50%,transparent),radia
 .st-waiting .c-arm.r{animation:wave 1.4s ease-in-out infinite}
 @keyframes wave{0%,100%{transform:rotate(150deg)}50%{transform:rotate(115deg)}}
 .st-question .c-arm.r{transform:rotate(160deg)}
-.st-quiet .c-rig{animation:sway 4s ease-in-out infinite}
+.st-quiet:not(.harness-antigravity) .c-rig{animation:sway 4s ease-in-out infinite}
+.st-idle:not(.harness-antigravity) .c-rig{animation:idleStretch 12s ease-in-out infinite}
+@keyframes idleStretch{0%,75%,100%{transform:rotate(0deg) translateY(0)}78%{transform:rotate(-2deg) translateY(-1px)}84%{transform:rotate(2deg) translateY(-1px)}90%{transform:rotate(0deg) translateY(-2px)}}
 @keyframes sway{0%,100%{transform:rotate(-1.5deg)}50%{transform:rotate(1.5deg)}}
 .st-stopped .bot,.st-closed .bot,.st-idle .bot{filter:saturate(.35)}
 .c-bulb{animation:bulb 1.6s steps(2) infinite}
@@ -339,7 +449,7 @@ body.night{--sky:radial-gradient(1px 1px at 40px 8px,#fff 50%,transparent),radia
 .popup{position:absolute;left:50%;top:40px;transform:translateX(-50%);white-space:nowrap;font-size:12px;font-weight:700;color:var(--ink);background:var(--surface);border:1.5px solid var(--grid);border-radius:999px;padding:1px 8px;pointer-events:none;animation:rise 1.8s ease-out forwards;z-index:5}
 @keyframes rise{0%{opacity:0;transform:translate(-50%,6px)}15%{opacity:1}100%{opacity:0;transform:translate(-50%,-34px)}}
 
-/* ---------------------------------------------------------------- office cat */
+/* ---------------------------------------------------------------- office cat & watercooler */
 .cat{position:absolute;bottom:4px;left:12px;width:44px;height:30px;z-index:2;animation:prowl 46s linear infinite;cursor:pointer}
 .cat svg{width:44px;height:30px;overflow:visible}
 .cat .cb{fill:#4b4a52} :root[data-theme=dark] .cat .cb{fill:#c9c3b6}
@@ -348,6 +458,21 @@ body.night{--sky:radial-gradient(1px 1px at 40px 8px,#fff 50%,transparent),radia
 .cat .lg:nth-of-type(2){animation-delay:.2s}
 @keyframes prowl{0%{left:12px;transform:scaleX(-1)}46%{left:calc(100% - 64px);transform:scaleX(-1)}50%{left:calc(100% - 64px);transform:scaleX(1)}96%{left:12px;transform:scaleX(1)}100%{left:12px;transform:scaleX(-1)}}
 @keyframes paw{from{transform:rotate(-14deg)}to{transform:rotate(14deg)}}
+
+.watercooler{position:absolute;bottom:6px;right:16px;width:32px;display:flex;flex-direction:column;align-items:center;cursor:pointer;z-index:2;transition:transform .2s ease}
+.watercooler:hover{transform:scale(1.08)}
+.watercooler svg{width:30px;height:52px;overflow:visible}
+.wc-bottle{fill:rgba(56,189,248,.4);stroke:#0284c7;stroke-width:1.2}
+.wc-water{fill:#38bdf8;opacity:.75}
+.wc-bubble{fill:#fff;animation:bubbleRise 2.4s ease-in infinite}
+.wc-bubble.b2{animation-delay:1.2s}
+.wc-body{fill:var(--chip);stroke:var(--grid);stroke-width:1.2}
+.wc-recess{fill:var(--surface);stroke:var(--grid);stroke-width:1}
+.wc-spigot.cold{fill:#38bdf8} .wc-spigot.hot{fill:#ef4444}
+.wc-cup{fill:#fff;stroke:var(--grid);stroke-width:.8}
+.wc-feet{fill:var(--frame2)}
+.wc-tag{font-size:9.5px;font-weight:600;color:var(--muted);white-space:nowrap;margin-top:1px}
+@keyframes bubbleRise{0%{transform:translateY(4px);opacity:0}30%{opacity:1}100%{transform:translateY(-14px);opacity:0}}
 
 /* ---------------------------------------------------------------- performance view */
 .page{max-width:1320px;margin:16px auto 0;padding:0 22px}
@@ -605,6 +730,7 @@ header{flex-wrap:wrap;row-gap:8px}
       <div class="inbox" id="inbox"></div>
     </div>
     <div class="cat" id="cat" aria-hidden="true" title="The office cat"><svg viewBox="0 0 44 30"><path class="cb" d="M8,14 Q4,6 9,4 Q11,9 13,10 Q20,8 28,10 Q36,9 38,16 Q39,23 33,24 L12,24 Q6,23 8,14 Z"/><path class="cb" d="M37,16 Q44,12 42,4 Q41,2 40,4 Q41,11 36,13 Z"/><path class="cb" d="M6,6 L8,0 L11,5 Z"/><path class="cb" d="M12,5 L15,0 L16,6 Z"/><circle class="ce" cx="9" cy="9" r="1.3"/><circle class="ce" cx="14" cy="9" r="1.3"/><rect class="cb lg" x="13" y="22" width="3.5" height="8" rx="1.7"/><rect class="cb lg" x="29" y="22" width="3.5" height="8" rx="1.7"/></svg></div>
+    <div class="watercooler" id="watercooler" aria-label="Office watercooler" title="Office watercooler · Click for a water break!"><svg viewBox="0 0 32 54" aria-hidden="true"><path class="wc-bottle" d="M9,20 Q9,5 16,5 Q23,5 23,20 Z"/><ellipse class="wc-water" cx="16" cy="16" rx="6" ry="1.8"/><circle class="wc-bubble b1" cx="14" cy="17" r="1.2"/><circle class="wc-bubble b2" cx="18" cy="13" r="1"/><rect class="wc-body" x="7" y="21" width="18" height="30" rx="3"/><rect class="wc-recess" x="10" y="25" width="12" height="13" rx="2"/><rect class="wc-spigot cold" x="12" y="26" width="2.5" height="3.5" rx=".8"/><rect class="wc-spigot hot" x="17.5" y="26" width="2.5" height="3.5" rx=".8"/><polygon class="wc-cup" points="13.5,33 18.5,33 17.5,37 14.5,37"/><rect class="wc-feet" x="8" y="51" width="16" height="3" rx="1.5"/></svg><span class="wc-tag">Break area</span></div>
   </section>
   <div class="rooms" id="rooms"></div>
   <div class="annex">
@@ -629,6 +755,11 @@ header{flex-wrap:wrap;row-gap:8px}
       <textarea id="ptext" rows="1" placeholder="Tell an agent what to do. Type @ to pick one." aria-label="Prompt"></textarea>
       <div class="opts" id="opts">
         <select id="folder" aria-label="Folder for the new agent"></select>
+        <select id="harness" aria-label="Harness for the new agent">
+          <option value="claude">Claude</option>
+          <option value="antigravity">Antigravity</option>
+          <option value="codex">Codex</option>
+        </select>
         <select id="model" aria-label="Model for the new agent">
           <option value="">Default model</option><option value="opus">Opus</option><option value="sonnet">Sonnet</option><option value="haiku">Haiku</option><option value="fable">Fable</option>
         </select>
@@ -697,24 +828,199 @@ const HAT = {
   you: `<path class="c-crown" d="M38,33 L41,12 L51,25 L60,7 L69,25 L79,12 L82,33 Z"/><circle class="c-gem" cx="60" cy="25" r="3"/>`,
   helper: `<path class="c-beanie" d="M33,42 Q34,19 60,19 Q86,19 87,42 Z"/><line class="c-ant" x1="60" y1="19" x2="60" y2="11"/><ellipse class="c-prop" cx="60" cy="10" rx="15" ry="3.5"/>`,
 };
-function art(kind, mood, desk) {
+function harnessOf(s) {
+  if (!s) return "claude";
+  if (typeof s === "string") {
+    const l = s.toLowerCase();
+    if (l === "antigravity" || l.includes("gemini")) return "antigravity";
+    if (l === "codex" || l.includes("openai") || l.includes("gpt")) return "codex";
+    if (l === "claude") return "claude";
+  }
+  if (typeof s === "object") {
+    if (s.harness) {
+      const h = String(s.harness).toLowerCase();
+      if (h.includes("antigravity") || h.includes("gemini")) return "antigravity";
+      if (h.includes("codex") || h.includes("openai")) return "codex";
+      if (h.includes("claude")) return "claude";
+      return h;
+    }
+    const m = String(s.model || "").toLowerCase();
+    if (m.includes("gemini") || m.includes("antigravity")) return "antigravity";
+    if (m.includes("gpt") || m.includes("codex") || m.includes("o1") || m.includes("o3") || m.includes("o4")) return "codex";
+    if (m.includes("claude") || m.includes("opus") || m.includes("sonnet") || m.includes("haiku") || m.includes("fable") || m.includes("mythos")) return "claude";
+    const id = String(s.id || "").toLowerCase();
+    const tr = String(s.transcript || "").toLowerCase();
+    if (id.includes("antigravity") || tr.includes("antigravity") || tr.includes(".gemini")) return "antigravity";
+  }
+  return "claude";
+}
+
+function art(kind, mood, desk, harness) {
+  harness = harness || "claude";
+  const isAntigravity = harness === "antigravity";
+  const isCodex = harness === "codex";
+  const isClaude = harness === "claude";
+
   const eyes = mood === "sleep" ? EYES_SHUT : mood === "half" ? EYES_HALF :
     EYES_OPEN(mood === "work" ? 63 : mood === "ask" ? 55 : 59);
   const mouth = MOUTH[{ work: "focus", happy: "happy", ask: "open", worry: "worry", sleep: "sleep", half: "focus" }[mood] || "happy"];
-  return `<ellipse class="c-shadow" cx="60" cy="125" rx="36" ry="5"/>` +
+
+  // Celestial aura / Orbit ring for Antigravity
+  const celestialAura = isAntigravity ? (
+    `<ellipse class="c-orbit-glow" cx="60" cy="70" rx="44" ry="32"/>` +
+    `<g class="c-orbit-system">` +
+    `<ellipse class="c-orbit-ring" cx="60" cy="70" rx="44" ry="15" transform="rotate(-18 60 70)"/>` +
+    `<circle class="c-orbit-sat sat-1" cx="17" cy="64" r="3.2"/>` +
+    `<circle class="c-orbit-sat sat-2" cx="103" cy="76" r="2.2"/>` +
+    `<path class="c-stardust s1" d="M30,36 L31.5,32 L33,36 L37,37.5 L33,39 L31.5,43 L30,39 L26,37.5 Z"/>` +
+    `<path class="c-stardust s2" d="M90,38 L91.2,35 L92.4,38 L95.4,39.2 L92.4,40.4 L91.2,43.4 L90,40.4 L87,39.2 Z"/>` +
+    `</g>`
+  ) : "";
+
+  // Headwear / Visor
+  let headwear = "";
+  if (kind === "you") {
+    headwear = HAT.you;
+  } else if (isClaude) {
+    headwear = `<g class="c-claude-crown">` +
+      `<path class="c-crown" d="M38,33 L41,12 L51,25 L60,7 L69,25 L79,12 L82,33 Z"/>` +
+      `<circle class="c-gem" cx="60" cy="24" r="3.2"/>` +
+      `<circle class="c-gem ruby" cx="47" cy="28" r="2"/>` +
+      `<circle class="c-gem ruby" cx="73" cy="28" r="2"/>` +
+      `<circle class="c-sparkle-dot" cx="60" cy="4" r="1.5"/>` +
+      `</g>` + (HAT[kind] && kind !== "desktop" ? HAT[kind] : "");
+  } else if (isAntigravity) {
+    headwear = `<ellipse class="c-ag-halo" cx="60" cy="20" rx="24" ry="5.5"/>` +
+      (HAT[kind] && kind !== "desktop" ? HAT[kind] : "");
+  } else {
+    headwear = HAT[kind] || "";
+  }
+
+  // Cybernetic visor for Codex
+  const cyberVisor = isCodex ? (
+    `<g class="c-cyber-visor-group">` +
+    `<polygon class="c-cyber-visor" points="36,52 84,52 81,64 39,64"/>` +
+    `<line class="c-visor-glint" x1="40" y1="58" x2="80" y2="58"/>` +
+    `<circle class="c-visor-led l" cx="42" cy="55" r="1.3"/>` +
+    `<circle class="c-visor-led r" cx="78" cy="55" r="1.3"/>` +
+    `</g>`
+  ) : "";
+
+  // Core for Antigravity belly
+  const agCore = isAntigravity ? `<circle class="c-ag-core" cx="60" cy="92" r="4.5"/>` : "";
+
+  // Claude Companion Pet
+  const companionPet = isClaude ? (
+    `<g class="c-companion-pet">` +
+    `<ellipse class="c-pet-body" cx="96" cy="92" rx="8.5" ry="7.5"/>` +
+    `<circle class="c-pet-head" cx="92" cy="85" r="5"/>` +
+    `<polygon class="c-pet-ear l" points="89,82 91,78 93,82"/>` +
+    `<polygon class="c-pet-ear r" points="93,82 95,78 97,82"/>` +
+    `<circle class="c-pet-eye" cx="91" cy="85" r="1"/>` +
+    `<path class="c-pet-tail" d="M103,94 Q108,89 105,96"/>` +
+    `</g>`
+  ) : "";
+
+  // Celebratory stars for finished / happy
+  const celebratoryStars = (
+    `<g class="c-celebrate-stars">` +
+    `<path class="c-star star-1" d="M30,30 L32,24 L34,30 L40,32 L34,34 L32,40 L30,34 L24,32 Z"/>` +
+    `<path class="c-star star-2" d="M86,28 L88,23 L90,28 L95,30 L90,32 L88,37 L86,32 L81,30 Z"/>` +
+    `<circle class="c-star-dot d1" cx="24" cy="44" r="1.8"/>` +
+    `<circle class="c-star-dot d2" cx="96" cy="42" r="1.8"/>` +
+    `</g>`
+  );
+
+  // Desk setup
+  let deskSetup = "";
+  if (desk) {
+    let terminal = "";
+    if (isAntigravity) {
+      terminal = (
+        `<g class="c-holo-terminal">` +
+        `<ellipse class="c-holo-base" cx="60" cy="100" rx="14" ry="3"/>` +
+        `<polygon class="c-holo-beam" points="49,100 71,100 81,77 39,77"/>` +
+        `<rect class="c-holo-screen" x="38" y="74" width="44" height="23" rx="3"/>` +
+        `<line class="c-holo-line l1" x1="42" y1="79" x2="68" y2="79"/>` +
+        `<line class="c-holo-line l2" x1="42" y1="84" x2="76" y2="84"/>` +
+        `<line class="c-holo-line l3" x1="42" y1="89" x2="58" y2="89"/>` +
+        `<circle class="c-holo-node" cx="72" cy="89" r="1.8"/>` +
+        `</g>`
+      );
+    } else if (isCodex) {
+      terminal = (
+        `<g class="c-matrix-terminal">` +
+        `<rect class="c-crt-casing" x="37" y="73" width="46" height="27" rx="4"/>` +
+        `<rect class="c-crt-screen" x="40" y="75" width="40" height="22" rx="2.5"/>` +
+        `<line class="c-crt-code c1" x1="43" y1="80" x2="72" y2="80"/>` +
+        `<line class="c-crt-code c2" x1="43" y1="85" x2="67" y2="85"/>` +
+        `<line class="c-crt-code c3" x1="43" y1="90" x2="76" y2="90"/>` +
+        `<rect class="c-crt-cursor" x="59" y="89" width="3" height="2"/>` +
+        `<circle class="c-crt-pwr" cx="77" cy="98" r="1"/>` +
+        `</g>`
+      );
+    } else {
+      terminal = (
+        `<path class="c-laptop" d="M40,100 L45,80 L75,80 L80,100 Z"/><circle class="c-logo" cx="60" cy="90" r="2.6"/>` +
+        `<g class="c-claude-notebook"><rect class="c-note-cover" x="16" y="93" width="16" height="13" rx="2"/><rect class="c-note-pages" x="18" y="94" width="13" height="11" rx="1"/><line class="c-note-ribbon" x1="24" y1="93" x2="24" y2="106"/></g>`
+      );
+    }
+
+    const coffeeMug = (
+      `<g class="c-coffee-mug">` +
+      `<rect class="c-mug-body" x="88" y="94" width="8" height="10" rx="2"/>` +
+      `<path class="c-mug-handle" d="M96,96 C98.5,96 98.5,101 96,101"/>` +
+      `<path class="c-mug-steam s1" d="M91,92 Q93,88 91,84"/>` +
+      `<path class="c-mug-steam s2" d="M93,93 Q91,89 93,85"/>` +
+      `</g>`
+    );
+
+    const typingSparks = (
+      `<g class="c-typing-sparks">` +
+      `<circle class="c-spark sp-1" cx="49" cy="98" r="1.5"/>` +
+      `<circle class="c-spark sp-2" cx="55" cy="96" r="1.2"/>` +
+      `<circle class="c-spark sp-3" cx="65" cy="96" r="1.4"/>` +
+      `<circle class="c-spark sp-4" cx="71" cy="98" r="1.5"/>` +
+      `</g>`
+    );
+
+    deskSetup = (
+      `<rect class="c-leg" x="16" y="106" width="6" height="18" rx="2"/><rect class="c-leg" x="98" y="106" width="6" height="18" rx="2"/>` +
+      `<rect class="c-desk" x="8" y="100" width="104" height="9" rx="3"/>` +
+      terminal + coffeeMug + typingSparks
+    );
+  } else if (isAntigravity) {
+    deskSetup = (
+      `<g class="c-holo-tablet">` +
+      `<rect class="c-tablet-frame" x="78" y="66" width="24" height="32" rx="3.5"/>` +
+      `<rect class="c-tablet-screen" x="80" y="68" width="20" height="28" rx="2"/>` +
+      `<line class="c-tablet-code" x1="83" y1="74" x2="96" y2="74"/>` +
+      `<line class="c-tablet-code" x1="83" y1="79" x2="93" y2="79"/>` +
+      `<circle class="c-tablet-gem" cx="90" cy="88" r="2.2"/>` +
+      `</g>`
+    );
+  }
+
+  return (
+    `<ellipse class="c-shadow" cx="60" cy="125" rx="36" ry="5"/>` +
     `<g class="c-rig">` +
+    celestialAura +
     `<rect class="c-body" x="28" y="30" width="64" height="84" rx="31"/>` +
     `<ellipse class="c-belly" cx="60" cy="92" rx="20" ry="16"/>` +
+    agCore +
     `<rect class="c-arm l" x="19" y="70" width="14" height="27" rx="7"/>` +
     `<rect class="c-arm r" x="87" y="70" width="14" height="27" rx="7"/>` +
     eyes + `<ellipse class="c-cheek" cx="39" cy="72" rx="5" ry="3"/><ellipse class="c-cheek" cx="81" cy="72" rx="5" ry="3"/>` + mouth +
-    (HAT[kind] || "") +
+    cyberVisor +
+    headwear +
     `<ellipse class="c-glow" cx="60" cy="66" rx="30" ry="22"/>` +
+    celebratoryStars +
+    companionPet +
     `</g>` +
-    (desk ? `<rect class="c-leg" x="16" y="106" width="6" height="18" rx="2"/><rect class="c-leg" x="98" y="106" width="6" height="18" rx="2"/>` +
-      `<rect class="c-desk" x="8" y="100" width="104" height="9" rx="3"/>` +
-      `<path class="c-laptop" d="M40,100 L45,80 L75,80 L80,100 Z"/><circle class="c-logo" cx="60" cy="90" r="2.6"/>` : "");
+    deskSetup
+  );
 }
+
 function moodOf(s) {
   const L = look(s);
   if (L === "working") return s.errors10m >= 2 ? "worry" : "work";
@@ -724,12 +1030,14 @@ function moodOf(s) {
   if (L === "stopped") return "worry";
   return "sleep";
 }
-function botSvg(kind, mood, desk, cls) {
+
+function botSvg(kind, mood, desk, cls, harness) {
+  const hName = harnessOf(harness || (typeof kind === "object" ? kind : null));
   const sv = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   sv.setAttribute("viewBox", "0 0 120 132");
-  sv.setAttribute("class", cls || "bot");
+  sv.setAttribute("class", (cls || "bot") + " harness-" + hName);
   sv.setAttribute("aria-hidden", "true");
-  sv.innerHTML = art(kind, mood, desk);
+  sv.innerHTML = art(kind, mood, desk, hName);
   return sv;
 }
 
@@ -817,7 +1125,9 @@ function helperEl(x) {
 function peekLines(s, now) {
   const L = look(s), m = s.metrics || {};
   const st = statusLine(s, now)[1].textContent;
-  const out = [s.title, [KIND[s.kind], modelLabel(s.model)].filter(Boolean).join(" · "), L === "closed" || L === "idle" ? `${LABEL[L]} ${st}` : st];
+  const hName = harnessOf(s);
+  const hLabel = hName === "antigravity" ? "Antigravity" : hName === "codex" ? "Codex" : "Claude";
+  const out = [s.title, [KIND[s.kind], hLabel, modelLabel(s.model)].filter(Boolean).join(" · "), L === "closed" || L === "idle" ? `${LABEL[L]} ${st}` : st];
   const doing = s.stuck ? bubbleText(s, now) : s.activity && L === "working" ? `${s.activity.name}: ${s.activity.what}` : s.said;
   if (doing) out.push(one(doing, 140));
   out.push(`Last 24h: ${money(m.cost || 0)} API-equivalent · ${s.turns} turns${s.ctx ? " · " + k(s.ctx) + " context" : ""}`);
@@ -829,13 +1139,14 @@ function peekLines(s, now) {
 function agentEl(s, now, hue, park, conflicted) {
   const L = look(s);
   const mood = s.stuck ? "worry" : moodOf(s);
-  const sig = [s.kind, mood, !park, hue].join("|");
+  const harness = harnessOf(s);
+  const sig = [s.kind, mood, !park, hue, harness].join("|");
   let el = agentEls.get(s.id);
   if (!el || el.dataset.sig !== sig) {
     el = h("button", { class: "agent", type: "button", onclick: () => openDrawer(s.id) });
     el.dataset.sig = sig;
     el.append(h("div", { class: "bubble" }),
-      h("div", { class: "stage" }, botSvg(s.kind === "background" || s.kind === "scheduled" ? s.kind : "desktop", mood, !park), h("span", { class: "prop", "aria-hidden": "true" })),
+      h("div", { class: "stage" }, botSvg(s.kind === "background" || s.kind === "scheduled" ? s.kind : "desktop", mood, !park, null, harness), h("span", { class: "prop", "aria-hidden": "true" })),
       h("div", { class: "name" }), h("div", { class: "stat" }), h("div", { class: "meta" }), h("div", { class: "helpers" }));
     el.querySelector(".bot").style.setProperty("--d", (Math.random() * 5).toFixed(2) + "s");
     el.addEventListener("mouseenter", () => { el._peek = Date.now(); });
@@ -844,13 +1155,14 @@ function agentEl(s, now, hue, park, conflicted) {
     agentEls.set(s.id, el);
   }
   el._s = s;
-  el.className = "agent st-" + L + (FILTER ? (matchesFilter(s) ? " hit" : " dim") : "") + ((L === "waiting" || L === "question") && isSeen(s) ? " seen" : "");
+  const pr = park ? "" : propOf(s);
+  el.className = "agent st-" + L + " harness-" + harness + (pr ? " prop-" + pr : "") + (FILTER ? (matchesFilter(s) ? " hit" : " dim") : "") + ((L === "waiting" || L === "question") && isSeen(s) ? " seen" : "");
   el.style.setProperty("--hue", hue);
   const bt = bubbleText(s, now);
   const b = el.querySelector(".bubble");
   b.textContent = bt; b.className = "bubble" + (bt ? "" : " empty") + (L === "question" ? " ask" : "") + (s.stuck ? " stuck" : "");
   b.title = bt;
-  const pr = park ? "" : propOf(s), pe = el.querySelector(".prop");
+  const pe = el.querySelector(".prop");
   if (pe.dataset.p !== pr) {
     pe.dataset.p = pr;
     pe.className = "prop " + pr;
@@ -862,6 +1174,7 @@ function agentEl(s, now, hue, park, conflicted) {
   const meta = [battery(s.turns)];
   const ml = modelLabel(s.model);
   if (ml) meta.push(h("span", { class: "chipx", title: s.model, text: ml }));
+  if (harness !== "claude") meta.push(h("span", { class: "chipx harness", title: "Harness: " + harness, text: harness === "antigravity" ? "agy" : "codex" }));
   if (s.errors10m) meta.push(h("span", { class: "chipx err", text: s.errors10m + " err" }));
   if (s.kind === "background") meta.push(h("span", { class: "chipx", text: "bg" }));
   put(el.querySelector(".meta"), ...meta);
@@ -871,20 +1184,20 @@ function agentEl(s, now, hue, park, conflicted) {
   // overlays
   el.querySelectorAll(".zzz,.sweat,.badge-ic").forEach((x) => x.remove());
   if (L === "idle" || L === "closed") el.append(h("span", { class: "zzz", "aria-hidden": "true" }, h("span", { text: "z" }), h("span", { text: "z" }), h("span", { text: "z" })));
-  if ((s.errors10m >= 2 && L === "working") || s.stuck) el.append(h("span", { class: "sweat", "aria-hidden": "true" }));
+  if ((s.errors10m >= 2 && L === "working") || s.stuck || (L === "working" && pr === "think")) el.append(h("span", { class: "sweat", "aria-hidden": "true" }));
   if (conflicted) el.append(h("span", { class: "badge-ic bolt", title: "Editing the same file as another agent", text: "⚡" }));
   if (s.stuck) el.append(h("span", { class: "badge-ic bolt", style: { background: "var(--serious)" }, title: bubbleText(s, now), text: "⏳" }));
   if ((s.peers || []).length) el.append(h("span", { class: "badge-ic mail", title: `${s.peers.length} message(s) from other sessions in the last 2h`, text: "✉" }));
-  el.setAttribute("aria-label", `${s.title}. ${KIND[s.kind] || ""}. ${LABEL[L]}. ${bt}`);
+  el.setAttribute("aria-label", `${s.title}. ${KIND[s.kind] || ""}. Harness: ${harness}. ${LABEL[L]}. ${bt}`);
   return el;
 }
 
 // ---------------------------------------------------------------- arriving agents
-let PENDING = []; // {name, at, short}: new agents between "Start" and their first appearance
+let PENDING = []; // {name, at, short, harness}: new agents between "Start" and their first appearance
 const guessName = (t) => one(String(t).replace(/@S+/g, " ").replace(/[^p{L}p{N}s'-]/gu, " ").split(/s+/).filter(Boolean).slice(0, 6).join(" ") || "New agent", 40);
 function ghostEl(p) {
   const g = h("span", { class: "ghost", title: "Starting up" });
-  g.append(botSvg("background", "work", false, "mini"), document.createTextNode(`${p.name} is on the way…`));
+  g.append(botSvg("background", "work", false, "mini", p.harness || "claude"), document.createTextNode(`${p.name} is on the way…`));
   return g;
 }
 function prunePending(d) {
@@ -931,7 +1244,7 @@ function render(d) {
     h("b", { text: String(m.prs || 0) }), ` PR${m.prs === 1 ? "" : "s"} · `, h("b", { text: `+${k(m.add || 0)} / −${k(m.del || 0)}` }), " lines",
     m.stuck ? h("span", {}, " · ", h("b", { text: String(m.stuck) }), " may be stuck") : null);
   const waiting = needs.slice(0, 4).map((n) => n.s);
-  const avatar = (s) => { const sp = h("span", { class: "ib-bot", style: { "--hue": (agentEls.get(s.id) && agentEls.get(s.id).style.getPropertyValue("--hue")) || "var(--s1)" } }); sp.append(botSvg(s.kind === "background" || s.kind === "scheduled" ? s.kind : "desktop", s.question ? "ask" : "happy", false, "mini")); return sp; };
+  const avatar = (s) => { const sp = h("span", { class: "ib-bot", style: { "--hue": (agentEls.get(s.id) && agentEls.get(s.id).style.getPropertyValue("--hue")) || "var(--s1)" } }); sp.append(botSvg(s.kind === "background" || s.kind === "scheduled" ? s.kind : "desktop", s.question ? "ask" : "happy", false, "mini", harnessOf(s))); return sp; };
   put($("#inbox"), ...waiting.map((s) => h("button", { onclick: () => openDrawer(s.id), "aria-label": `${s.title}, ${s.question ? "asked you" : "waiting"} ${ago(now - s.since)}` }, avatar(s), si(look(s)), h("span", { class: "t", text: s.title }),
     h("span", { class: "m", text: (s.question ? "asked you " : "waiting ") + ago(now - s.since) })),
   ), waiting.length ? null : h("div", { class: "sum", text: "Nobody needs you right now." }),
@@ -1114,13 +1427,15 @@ function fillDrawer(id) {
   drawerSig = sig;
   if (!s) { put(body, h("p", { class: "empty-note", text: "This agent is no longer listed." })); return; }
   const now = D.now, L = look(s), mt = s.metrics || {};
-  const portrait = botSvg(s.kind === "background" || s.kind === "scheduled" ? s.kind : "desktop", moodOf(s), false, "bot");
-  const head = h("div", { class: "dhead st-" + L, style: { "--hue": (agentEls.get(id) || {}).style ? agentEls.get(id).style.getPropertyValue("--hue") : "var(--s1)" } }, portrait,
-    h("div", {}, h("div", { class: "tt", text: s.title }), h("div", { class: "k", text: [KIND[s.kind], s.model].filter(Boolean).join(" · ") }),
+  const hName = harnessOf(s);
+  const portrait = botSvg(s.kind === "background" || s.kind === "scheduled" ? s.kind : "desktop", moodOf(s), false, "bot", hName);
+  const head = h("div", { class: "dhead st-" + L + " harness-" + hName, style: { "--hue": (agentEls.get(id) || {}).style ? agentEls.get(id).style.getPropertyValue("--hue") : "var(--s1)" } }, portrait,
+    h("div", {}, h("div", { class: "tt", text: s.title }), h("div", { class: "k", text: [KIND[s.kind], hName[0].toUpperCase() + hName.slice(1), s.model].filter(Boolean).join(" · ") }),
       h("div", { class: "stat", style: { marginTop: "4px" } }, ...statusLine(s, now))));
   const kv = h("dl", { class: "kv" });
   const add = (kk, v) => { if (v) kv.append(h("dt", { text: kk }), h("dd", { text: v })); };
   add("Doing now", s.activity ? `${s.activity.name}: ${s.activity.what}` : "");
+  add("Harness", hName.toUpperCase());
   add("Last said", s.said);
   add("Latest ask", s.prompt);
   if (s.first && s.first !== s.prompt) add("First task", s.first);
@@ -1320,8 +1635,9 @@ $("#pbox").addEventListener("submit", async (e) => {
     ptext.value = ""; grow(); renderRadio(D); return;
   }
   const btn = $("#send"); btn.disabled = true; btn.classList.add("busy");
-  const body = t.type === "new" ? { target: "new", text, cwd: $("#folder").value, model: $("#model").value } : { target: t.type === "all" ? "all" : t.sid, text };
-  const ghost = t.type === "new" ? { name: guessName(text), at: Date.now(), short: "" } : null;
+  const selHarness = $("#harness") ? $("#harness").value : "claude";
+  const body = t.type === "new" ? { target: "new", text, cwd: $("#folder").value, model: $("#model").value, harness: selHarness } : { target: t.type === "all" ? "all" : t.sid, text };
+  const ghost = t.type === "new" ? { name: guessName(text), at: Date.now(), short: "", harness: selHarness } : null;
   const note = { at: Date.now(), ok: true, text: t.type === "new" ? `Starting "${guessName(text)}"…` : t.type === "wake" ? `Waking "${t.name}"…` : `Sending to "${t.type === "all" ? "all background agents" : t.name}"…` };
   if (ghost) PENDING.push(ghost);
   localRadio.unshift(note);
@@ -1364,6 +1680,20 @@ trayInit();
 menuInit();
 setView(VIEW);
 $("#cat").addEventListener("click", (e) => { const p = h("span", { class: "popup", style: { top: "-18px" }, text: "prrr ♥" }); e.currentTarget.append(p); setTimeout(() => p.remove(), 1900); });
+const wc = $("#watercooler");
+if (wc) wc.addEventListener("click", (e) => {
+  const quotes = [
+    "Glug glug 💧 Staying hydrated!",
+    "Watercooler gossip: Antigravity agents are floating!",
+    "Refreshing break! 🚰 +10 Focus",
+    "Did you know? Matrix codex agents never sleep!",
+    "Cold mountain spring water 💧 Back to work!"
+  ];
+  const q = quotes[Math.floor(Math.random() * quotes.length)];
+  const p = h("span", { class: "popup", style: { top: "-24px" }, text: q });
+  e.currentTarget.append(p);
+  setTimeout(() => p.remove(), 2200);
+});
 let LIVE = false, lastState = 0;
 function connect() {
   // ?nolive keeps the page on polling (screenshots, low-power use)

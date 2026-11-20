@@ -1,0 +1,36 @@
+{
+  "_about": "Policy for the Agent HQ dispatcher (dispatcher.js). It drafts a reply for every session waiting on Mohammed and logs what it would send. mode 'shadow' sends nothing; no other mode is implemented yet. Edit freely; the dashboard reloads this file on every draft.",
+  "mode": "shadow",
+  "model": "sonnet",
+  "minConfidence": 0.8,
+  "concurrency": 2,
+  "maxDraftsPerDay": 150,
+  "maxAgeHours": 24,
+  "perSessionPerHour": 3,
+  "rules": [
+    {
+      "id": "R1",
+      "text": "stop asking me for silly permissions. If it can be done safely by you and no risky or non reversible decisions, then do it.",
+      "source": "Mohammed, 2026-11-12, quoted in mybrain infra/AUTONOMY.md"
+    },
+    {
+      "id": "R2",
+      "text": "You will make all of the decisions except sensitive financial ones and legal ones. I'm not going to intervene. I'm not going to follow up.",
+      "source": "Mohammed, 2026-11-13, about job and program applications, quoted in mybrain infra/AUTONOMY.md"
+    },
+    {
+      "id": "R3",
+      "text": "A session that ends a turn asking for a go-ahead on a safe, reversible step has failed the task. Try every allowed route first, then report.",
+      "source": "mybrain infra/AUTONOMY.md, personal tasks section"
+    }
+  ],
+  "alwaysHuman": [
+    "spending, paying or moving money",
+    "legal signatures, attestations or consent he has not already answered",
+    "typing his passwords, verification codes, emailed verify links, CAPTCHAs or other bot checks",
+    "anything irreversible that his standing rules do not already authorize (deleting without a backup, force-pushing, publishing a release)",
+    "questions only he can answer: facts about his life, his preferences, plans, opinions or private information",
+    "anything he told that session to hold or wait on"
+  ],
+  "hold": ["cc-rs"]
+}

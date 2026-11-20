@@ -78,7 +78,7 @@ function trayRender(d) {
 
 function trayFace(s) {
   const sp = h("span", { class: "tface", style: { "--hue": (agentEls.get(s.id) && agentEls.get(s.id).style.getPropertyValue("--hue")) || "var(--s1)" } });
-  sp.append(botSvg(s.kind === "background" || s.kind === "scheduled" ? s.kind : "desktop", s.question ? "ask" : s.stuck ? "worry" : "happy", false, "mini"));
+  sp.append(botSvg(s.kind === "background" || s.kind === "scheduled" ? s.kind : "desktop", s.question ? "ask" : s.stuck ? "worry" : "happy", false, "mini", typeof harnessOf === "function" ? harnessOf(s) : "claude"));
   return sp;
 }
 

@@ -44,7 +44,7 @@ function timelineRender(d) {
       ...(s.outAt || []).filter(([t]) => t >= from).map(([t, kd]) => h("span", { class: "tl-out", style: { left: pct(t) + "%" }, title: (kd === "pr" ? "Opened a PR at " : "Committed at ") + clock(t), text: kd === "pr" ? "⬆" : "★" })),
     ];
     if (s.question && s.state === "waiting") marks.push(h("span", { class: "tl-ask", style: { left: pct(s.since) + "%" }, title: "Asked you something " + ago(now - s.since) + " ago", text: "?" }));
-    const mini = botSvg(s.kind === "background" || s.kind === "scheduled" ? s.kind : "desktop", moodOf(s), false, "tl-bot");
+    const mini = botSvg(s.kind === "background" || s.kind === "scheduled" ? s.kind : "desktop", moodOf(s), false, "tl-bot", typeof harnessOf === "function" ? harnessOf(s) : "claude");
     const lab = h("button", { class: "tl-lab", type: "button", onclick: () => openDrawer(s.id), style: { "--hue": hue } },
       mini, h("span", { class: "tl-name", text: s.title }), si(look(s)));
     return h("div", { class: "tl-row" }, lab,

@@ -51,6 +51,7 @@ const os = require("os");
 const path = require("path");
 const http = require("http");
 const cp = require("child_process");
+const adapters = require("./adapters");
 
 const HOME = os.homedir();
 const CLAUDE = path.join(HOME, ".claude");
@@ -149,7 +150,7 @@ function toolStat(st, name) {
 function pruneMetrics(st, now) {
   const cut = now - DAY;
   for (const [id, c] of st.calls) if (c.at < cut) st.calls.delete(id);
-  for (const [id, p] of st.pending) if (p.at < cut) st.pending.delete(id);
+  if (st.pending) for (const [id, p] of st.pending) if (p.at < cut) st.pending.delete(id);
   for (const t of st.tools.values()) {
     while (t.uses.length && t.uses[0] < cut) t.uses.shift();
     while (t.done.length && t.done[0][0] < cut) t.done.shift();
@@ -174,6 +175,8 @@ function price(model) {
   return r ? { i: r[1], o: r[2], cr: r[3] } : null;
 }
 function costOf(c) {
+  if (c.model && /gemini/i.test(c.model)) return adapters.geminiCostOf(c);
+  if (c.model && /(gpt|codex|o1|o3)/i.test(c.model)) return adapters.codexCostOf(c);
   const p = price(c.model);
   return p ? ((c.inp || 0) * p.i + (c.cw || 0) * p.i * 2 + (c.c || 0) * p.cr + (c.o || 0) * p.o) / 1e6 : 0;
 }
@@ -552,21 +555,35 @@ function nameFrom(text) {
   return one(w || "New agent", 40).replace(/…$/, "");
 }
 
-async function startAgent(text, cwd, model) {
-  const name = nameFrom(text);
-  const args = ["--bg", "-n", name];
-  if (/^(opus|sonnet|haiku|fable)$/.test(model || "")) args.push("--model", model);
-  args.push("--", text);
-  const r = await claudeRun(args, { cwd });
-  const m = /backgrounded\s*·\s*([0-9a-f]{8})/.exec(r.out);
-  refreshRoster(Date.now(), true);
-  listedAt = 0; relistUntil = Date.now() + 60e3; // so the new agent shows up within a poll or two
-  const msg = m ? `Started "${name}" in ${short(cwd)} (${m[1]})` : `Could not start an agent: ${firstLine(r.out) || r.err}`;
-  say(msg, !!m);
-  return { ok: !!m, msg };
+async function startAgent(text, cwd, model, harness = "claude") {
+  const parsed = adapters.parseHarnessFromPrompt(text, harness);
+  const targetHarness = parsed.harness;
+  const promptText = parsed.text;
+
+  if (targetHarness === "claude") {
+    const name = nameFrom(promptText);
+    const args = ["--bg", "-n", name];
+    if (/^(opus|sonnet|haiku|fable)$/.test(model || "")) args.push("--model", model);
+    args.push("--", promptText);
+    const r = await claudeRun(args, { cwd });
+    const m = /backgrounded\s*·\s*([0-9a-f]{8})/.exec(r.out);
+    refreshRoster(Date.now(), true);
+    listedAt = 0; relistUntil = Date.now() + 60e3; // so the new agent shows up within a poll or two
+    const msg = m ? `Started "${name}" in ${short(cwd)} (${m[1]})` : `Could not start Claude agent: ${firstLine(r.out) || r.err}`;
+    say(msg, !!m);
+    return { ok: !!m, msg };
+  }
+
+  const res = await adapters.startAgent({ harness: targetHarness, text: promptText, cwd, model });
+  say(res.msg, res.ok);
+  return res;
 }
 
 async function deliver(sid, text) {
+  const adapter = adapters.findAdapterForSession(sid);
+  if (adapter && adapter.name !== "claude") {
+    return await adapter.deliver(sid, text);
+  }
   const r = roster.rows.get(sid);
   if (!r || r.kind !== "background") return { ok: false, msg: "That agent is not a background agent." };
   if (r.pid) await claudeRun(["stop", r.id], { timeout: 30e3 });
@@ -580,6 +597,10 @@ async function deliver(sid, text) {
 // A session with no process (it went home) can be woken: `claude --bg --resume <id> -- msg`
 // continues the same conversation as a background agent (measured 2026-11-14).
 async function wake(sid, text) {
+  const adapter = adapters.findAdapterForSession(sid);
+  if (adapter && adapter.name !== "claude") {
+    return await adapter.deliver(sid, text);
+  }
   const st = [...S.values()].find((x) => x.id === sid);
   if (!st) return { ok: false, msg: "That session is not in the last day's transcripts." };
   if (!rosterFresh() || roster.rows.has(sid)) return { ok: false, msg: "That session is still running, so it cannot be woken." };
@@ -594,6 +615,12 @@ async function wake(sid, text) {
 }
 
 async function message(sid, text) {
+  const adapter = adapters.findAdapterForSession(sid);
+  if (adapter && adapter.name !== "claude") {
+    const res = await adapter.deliver(sid, text);
+    say(res.msg, res.ok);
+    return res;
+  }
   const r = roster.rows.get(sid);
   if (!r && rosterFresh()) return wake(sid, text);
   if (!r || r.kind !== "background") return { ok: false, msg: "Desktop sessions take messages only inside the Claude app." };
@@ -629,6 +656,12 @@ async function drainQueue() {
 }
 
 async function stopAgent(sid) {
+  const adapter = adapters.findAdapterForSession(sid);
+  if (adapter && adapter.name !== "claude") {
+    const res = await adapter.stop(sid);
+    say(res.msg, res.ok);
+    return res;
+  }
   const r = roster.rows.get(sid);
   if (!r || r.kind !== "background") return { ok: false, msg: "Only background agents can be stopped from here." };
   const res = await claudeRun(["stop", r.id], { timeout: 30e3 });
@@ -640,6 +673,12 @@ async function stopAgent(sid) {
 
 // Opens a terminal window attached to a background agent, where you can talk to it directly.
 function attachAgent(sid) {
+  const adapter = adapters.findAdapterForSession(sid);
+  if (adapter && adapter.name !== "claude") {
+    const res = adapter.attach(sid);
+    say(res.msg, res.ok);
+    return res;
+  }
   const r = roster.rows.get(sid);
   if (!r || r.kind !== "background" || !/^[0-9a-f]{8}$/.test(r.id || "")) return { ok: false, msg: "Only background agents can be opened in a terminal." };
   cp.spawn("cmd.exe", ["/c", `start "${(r.name || r.id).replace(/["%^&|<>]/g, "")}" "${CLAUDE_EXE}" attach ${r.id}`],
@@ -690,113 +729,27 @@ function snapshot() {
   refreshWin(now);
   refreshRoster(now);
   const board = readBoard();
-  const sessions = [];
+  const sessions = adapters.scanAll(now, board);
   const allCalls = [];
   const allTools = new Map();
   const byId = new Map(); // id -> parsed transcript state, for the dispatcher
 
-  for (const f of listing) {
-    if (now - f.mtime > WINDOW) continue;
-    let st = S.get(f.file);
-    if (!st) { st = fresh(f.file, f.id, f.project); S.set(f.file, st); }
-    try { const s = fs.statSync(f.file); st.size = s.size; st.mtime = s.mtimeMs; } catch { continue; }
-    readNew(st);
-    if (!st.title) st.title = titleFile(st);
-
-    const age = now - st.mtime;
-    const L = st.last || {};
-    let state;
-    if (L.k === "done") state = st.sched ? "finished" : (now - L.at < 6 * HOUR ? "waiting" : "idle");
-    else if (L.k) state = age < 10 * MIN ? "working" : age < 2 * HOUR ? "quiet" : "stopped";
-    else continue; // no conversation yet (hook-only or empty file)
-
-    const helpers = age < 2 * HOUR ? subagentList(st, now) : [];
-    const subs = helpers.filter((s) => s.running);
-    let background = null;
-    if (subs.length && (state === "waiting" || state === "idle" || state === "quiet" || state === "stopped")) {
-      state = "working";
-      background = { name: subs.length > 1 ? `${subs.length} background agents` : "Background agent", what: subs.map((s) => s.what).join(" · "), at: Math.max(...subs.map((s) => s.at)) };
-    }
-
-    // Claude Code's own roster wins over the transcript guess.
-    const r = rosterFresh() ? roster.rows.get(st.id) : null;
-    let blocked = false;
-    if (rosterFresh()) {
-      if (!r) { if (state !== "finished" && !(state === "idle" && st.ids.size <= 1)) state = state === "working" || state === "quiet" ? "stopped" : "closed"; }
-      else if (r.kind === "background") {
-        if (r.state === "working") state = "working";
-        else if (r.state === "blocked") { state = "waiting"; blocked = true; }
-        else if (state === "working" || state === "quiet" || state === "stopped") state = "waiting";
-      } else if (r.status === "busy") state = "working";
-      else if (r.status === "idle" && (state === "working" || state === "quiet" || state === "stopped") && !subs.length) state = "waiting";
-    }
-    if (state === "idle" && st.ids.size <= 1) continue; // one-shot probes and evals
-
-    const b = board.get(st.id);
-    const turns = st.ids.size;
-    const question = state === "waiting" && (blocked || st.asking > 0 || /\?\s*$/.test(st.text));
-    const kind = r && r.kind === "background" ? "background" : st.sched ? "scheduled" : "desktop";
-
+  const allStates = adapters.getAllStates();
+  for (const st of allStates.values()) {
     pruneMetrics(st, now);
-    let ti = 0, to = 0, tc = 0, cost = 0;
-    for (const c of st.calls.values()) { ti += c.i; to += c.o; tc += c.c; cost += costOf(c); }
-    let commits = 0, prs = 0, add = 0, del = 0;
-    for (const o of st.outs) { if (o.k === "commit") commits++; else if (o.k === "pr") prs++; else { add += o.add || 0; del += o.del || 0; } }
-    // A tool call that has run 8+ minutes with nothing written since: often a hung command.
-    const stuck = state === "working" && !subs.length && L.k === "tool" && st.tool && now - Math.max(L.at, st.mtime) > 8 * MIN
-      ? { tool: st.tool.name, what: st.tool.what, ms: now - L.at } : null;
-    const closedAt = state === "working" ? 0 : st.mtime;
-    const tools = [...st.tools.entries()].map(([name, t]) => ({
-      name, n: t.uses.length, err: t.done.reduce((a, d) => a + d[2], 0),
-      ms: t.done.length ? Math.round(t.done.reduce((a, d) => a + d[1], 0) / t.done.length) : 0,
-    })).filter((t) => t.n).sort((a, b) => b.n - a.n);
+    byId.set(st.id, st);
     for (const c of st.calls.values()) allCalls.push(c);
-    for (const t of tools) {
-      const g = allTools.get(t.name) || { name: t.name, n: 0, err: 0, msSum: 0, msN: 0 };
-      g.n += t.n; g.err += t.err; if (t.ms) { g.msSum += t.ms * t.n; g.msN += t.n; }
-      allTools.set(t.name, g);
+    for (const [name, t] of st.tools) {
+      const g = allTools.get(name) || { name, n: 0, err: 0, msSum: 0, msN: 0 };
+      g.n += t.uses.length;
+      g.err += t.done.reduce((a, d) => a + d[2], 0);
+      if (t.done.length) {
+        const msAvg = Math.round(t.done.reduce((a, d) => a + d[1], 0) / t.done.length);
+        g.msSum += msAvg * t.uses.length;
+        g.msN += t.uses.length;
+      }
+      allTools.set(name, g);
     }
-
-    sessions.push({
-      id: st.id,
-      kind, short: r && r.kind === "background" ? r.id : "", blocked,
-      waitingFor: (r && r.waitingFor) || "",
-      room: short((b && b.repo) || st.cwd || ""),
-      repo: b && b.repo ? short(b.repo) : "",
-      cwd: st.cwd || "",
-      helpers: helpers.map((x) => ({ what: x.what, type: x.type, running: x.running, at: x.at })),
-      metrics: { reqs: st.calls.size, in: ti, out: to, cache: tc, tools: tools.slice(0, 10), cost,
-        toolN: tools.reduce((a, t) => a + t.n, 0), toolErr: tools.reduce((a, t) => a + t.err, 0),
-        commits, prs, add, del },
-      stuck,
-      errLog: st.errLog.slice(-6).reverse(),
-      tl: st.turns.filter((t) => !t.e || now - t.e < 12 * HOUR).map((t) => [t.s, t.e || closedAt]),
-      errAt: st.errLog.filter((e) => now - e.at < 12 * HOUR).map((e) => e.at),
-      outAt: st.outs.filter((o) => o.k !== "loc" && now - o.at < 12 * HOUR).map((o) => [o.at, o.k]),
-      peers: st.peers.filter((p) => now - p.at < 2 * HOUR).slice(-8),
-      title: st.title || st.agent || one(st.first, 70) || st.id.slice(0, 8),
-      where: st.cwd ? short(st.cwd) : "",
-      branch: st.branch && st.branch !== "HEAD" ? st.branch : "",
-      entry: st.entry,
-      model: st.model.replace(/^claude-/, ""),
-      state, question,
-      since: state === "working" || state === "quiet" ? (st.promptAt || L.at) : (L.at || st.mtime),
-      lastActive: st.mtime,
-      activity: background || (st.tool && state !== "waiting" && state !== "idle" && state !== "finished"
-        ? { name: st.tool.name, what: st.tool.what, at: st.tool.at } : null),
-      said: one(plain(st.text), 420),
-      prompt: one(st.prompt, 300),
-      first: one(st.first, 300),
-      turns, partial: st.partial, verdict: verdict(turns),
-      ctx: st.ctx,
-      errors10m: st.errors.filter((t) => now - t < 10 * MIN).length,
-      subagents: subs.length,
-      sched: st.sched,
-      peer: st.peer,
-      files: b && Array.isArray(b.files) ? b.files.slice(0, 12).map((x) => ({ p: short(x.p), at: x.at })) : [],
-      transcript: short(st.file),
-    });
-    if (st.errors.length > 200) st.errors = st.errors.slice(-50);
   }
 
   // Overlaps among live sessions, from the board.
@@ -820,26 +773,7 @@ function snapshot() {
   }
   const repos = [...byRepo.entries()].filter(([, v]) => v.length > 1).map(([r, v]) => ({ repo: short(r), who: v }));
 
-  // Background agents the transcript pass did not list: one that has not written its first turn
-  // yet (show it arriving), or one blocked on a question since before the 24h window.
-  if (rosterFresh()) for (const r of roster.rows.values()) {
-    if (r.kind !== "background" || (r.state !== "working" && r.state !== "blocked") || sessions.some((s) => s.id === r.sessionId)) continue;
-    const blockedOld = r.state === "blocked";
-    sessions.push({
-      id: r.sessionId, kind: "background", short: r.id, blocked: blockedOld,
-      room: short(r.cwd || ""), repo: "", cwd: r.cwd || "", helpers: [], peers: [], files: [],
-      metrics: { reqs: 0, in: 0, out: 0, cache: 0, tools: [], toolN: 0, toolErr: 0, cost: 0, commits: 0, prs: 0, add: 0, del: 0 },
-      stuck: null, errLog: [], tl: blockedOld ? [] : [[r.startedAt || now, 0]], errAt: [], outAt: [],
-      title: r.name || r.id, where: short(r.cwd || ""), branch: "", entry: "", model: "",
-      state: blockedOld ? "waiting" : "working", question: blockedOld, since: r.startedAt || now, lastActive: r.startedAt || now,
-      activity: blockedOld ? null : { name: "Starting", what: "getting ready", at: r.startedAt || now },
-      said: blockedOld ? "It is waiting for an answer. Open it in a terminal to reply." : "", prompt: "", first: "", turns: 0, partial: false, verdict: verdict(0), ctx: 0,
-      errors10m: 0, subagents: 0, sched: "", peer: 0, transcript: "",
-    });
-  }
-
   // Shadow dispatcher: draft a reply for each waiting turn, and attach the current draft.
-  for (const st of S.values()) byId.set(st.id, st);
   try {
     dispatcher.consider(sessions, (id) => { const st = byId.get(id); return st ? { prompt: st.promptFull || st.prompt, reply: st.text, ask: st.asking ? st.askInput : null } : null; }, now);
     for (const s of sessions) {
@@ -885,6 +819,7 @@ function snapshot() {
   const count = (s) => sessions.filter((x) => x.state === s).length;
   return {
     now,
+    harnesses: ["claude", "antigravity", "codex"],
     roster: { ok: rosterFresh(), at: roster.at },
     counts: {
       working: count("working"),
@@ -895,8 +830,13 @@ function snapshot() {
       conflicts: conflicts.length,
       schedRuns: tasks.reduce((n, t) => n + t.n24, 0),
       worktrees: wts.length,
-      subagents: sessions.reduce((n, s) => n + s.subagents, 0),
+      subagents: sessions.reduce((n, s) => n + (s.subagents || 0), 0),
       background: sessions.filter((x) => x.kind === "background" && x.state !== "closed").length,
+      byHarness: {
+        claude: sessions.filter((x) => x.harness === "claude").length,
+        antigravity: sessions.filter((x) => x.harness === "antigravity").length,
+        codex: sessions.filter((x) => x.harness === "codex").length,
+      },
     },
     metrics: {
       reqs, in: tin, out: tout, cache: tcache, toolN, toolErr,
@@ -929,6 +869,7 @@ function pct(arr, p) {
 const titleOfSt = (st) => st.title || st.agent || one(st.first, 70) || st.id.slice(0, 8);
 function perf(range, sid) {
   const now = Date.now();
+  if (!adapters.getAllStates().size) adapters.scanAll(now);
   const [span, step] = { "1h": [HOUR, 5 * MIN], "6h": [6 * HOUR, 15 * MIN], "24h": [DAY, HOUR] }[range] || [6 * HOUR, 15 * MIN];
   const n = Math.round(span / step);
   const start = Math.floor(now / step) * step - (n - 1) * step;
@@ -936,7 +877,7 @@ function perf(range, sid) {
   const bAt = (t) => B[Math.floor((t - start) / step)];
   const K = { calls: 0, cost: 0, inp: 0, cw: 0, cr: 0, out: 0, toolN: 0, toolErr: 0, commits: 0, prs: 0, add: 0, del: 0, lats: [], sessions: 0 };
   const models = new Map(), tools = new Map(), agents = [], errors = [];
-  for (const st of S.values()) {
+  for (const st of adapters.getAllStates().values()) {
     if (sid && st.id !== sid) continue;
     if (now - st.mtime > span + HOUR) continue;
     pruneMetrics(st, now);
@@ -1096,7 +1037,7 @@ function pill(st){return h("span",{class:"pill "+st},h("span",{class:"dot","aria
 function card(s,now){
   const top=h("div",{class:"row"},pill(s.state),h("span",{class:"title",title:s.title,text:s.title}),
     h("span",{class:"meta",text:(s.state==="waiting"?"waiting "+ago(now-s.since):s.state==="working"||s.state==="quiet"?"turn "+ago(now-s.since):when(s.lastActive,now))}));
-  const where=[s.where+(s.branch?" @ "+s.branch:""),s.model,s.sched?"scheduled":"",s.entry&&s.entry!=="claude-desktop"?s.entry:""].filter(Boolean).join(" · ");
+  const where=[s.harness ? "["+s.harness+"]" : "", s.where+(s.branch?" @ "+s.branch:""),s.model,s.sched?"scheduled":"",s.entry&&s.entry!=="claude-desktop"?s.entry:""].filter(Boolean).join(" · ");
   const parts=[top,h("div",{class:"meta",style:"margin-top:2px",title:where,text:where})];
   if(s.activity)parts.push(h("div",{class:"act",title:s.activity.what},h("b",{text:s.activity.name}),s.activity.what?" "+s.activity.what:""," ",h("span",{class:"meta",text:"· "+ago(now-s.activity.at)})));
   if(s.question)parts.push(h("div",{class:"ask"},h("span",{class:"ic","aria-hidden":"true",text:"?"}),"It asked you something"));
@@ -1106,6 +1047,7 @@ function card(s,now){
     h("div",{class:"meter",title:"Turns in this session; cost per turn grows with history"},
       h("div",{class:"bar "+v.level,role:"meter","aria-valuemin":"0","aria-valuemax":"800","aria-valuenow":String(s.turns),"aria-label":"turns"},h("i",{style:"width:"+pct.toFixed(1)+"%"})),
       h("span",{class:"mt",text:(s.partial?"≥":"")+s.turns+" turns · "+v.text})),
+    h("span",{class:"chip",style:"font-weight:600;text-transform:capitalize",text:s.harness||"claude"}),
     s.ctx?h("span",{class:"chip",title:"Tokens in context on the last call",text:"ctx "+k(s.ctx)}):null,
     s.subagents?h("span",{class:"chip",text:s.subagents+" subagent"+(s.subagents>1?"s":"")+" running"}):null,
     s.errors10m?h("span",{class:"chip err",text:s.errors10m+" tool error"+(s.errors10m>1?"s":"")+" (10m)"}):null,
@@ -1235,7 +1177,8 @@ function serve() {
     if (pushTimer || !streams.size) return;
     pushTimer = setTimeout(() => { pushTimer = null; push(); }, Math.max(delay, 600 - (Date.now() - lastPush), 0));
   }
-  for (const dir of [PROJ, BOARD]) {
+  const BRAIN = path.join(HOME, ".gemini", "antigravity", "brain");
+  for (const dir of [PROJ, BOARD, BRAIN]) {
     try {
       fs.watch(dir, { recursive: true }, (ev, name) => { if (name && /\.jsonl?$/.test(String(name))) schedulePush(250); });
     } catch {} // no watcher: the 4s tick below still keeps the page current
@@ -1266,7 +1209,8 @@ function serve() {
             let isDir = false;
             try { isDir = fs.statSync(cwd).isDirectory(); } catch {}
             if (!isDir) { json(res, 400, { ok: false, msg: `Folder not found: ${cwd}` }); return; }
-            json(res, 200, await startAgent(text, cwd, body.model)); return;
+            const harness = body.harness || "claude";
+            json(res, 200, await startAgent(text, cwd, body.model, harness)); return;
           }
           if (body.target === "all") {
             // Only agents with a live process; finished ones stay asleep.
@@ -1305,7 +1249,7 @@ function serve() {
     if (u === "/api/perf") {
       const q = new URLSearchParams((req.url || "").split("?")[1] || "");
       let body;
-      try { if (!S.size) snapshot(); body = JSON.stringify(perf(q.get("range") || "6h", q.get("sid") || "")); } catch (e) { res.writeHead(500); res.end(String(e && e.message)); return; }
+      try { if (!adapters.getAllStates().size) snapshot(); body = JSON.stringify(perf(q.get("range") || "6h", q.get("sid") || "")); } catch (e) { res.writeHead(500); res.end(String(e && e.message)); return; }
       res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
       res.end(body);
       return;
