@@ -560,6 +560,24 @@ async function startAgent(text, cwd, model, harness = "claude") {
   const targetHarness = parsed.harness;
   const promptText = parsed.text;
 
+  if (targetHarness === "all") {
+    // Fan out and distribute task across harnesses or subtask slices (separated by '|')
+    const slices = promptText.includes("|")
+      ? promptText.split("|").map((s) => s.trim()).filter(Boolean)
+      : [promptText];
+    const availableHarnesses = ["claude", "antigravity"];
+    const results = [];
+    for (let i = 0; i < slices.length; i++) {
+      const h = availableHarnesses[i % availableHarnesses.length];
+      const sliceText = slices[i];
+      results.push(await startAgent(sliceText, cwd, model, h));
+    }
+    const successCount = results.filter((r) => r.ok).length;
+    const msg = `Distributed ${slices.length} task slice${slices.length > 1 ? "s" : ""} across ${results.length} agents (${successCount} started).`;
+    say(msg, successCount > 0);
+    return { ok: successCount > 0, msg, results };
+  }
+
   if (targetHarness === "claude") {
     const name = nameFrom(promptText);
     const args = ["--bg", "-n", name];
@@ -1213,12 +1231,16 @@ function serve() {
             json(res, 200, await startAgent(text, cwd, body.model, harness)); return;
           }
           if (body.target === "all") {
-            // Only agents with a live process; finished ones stay asleep.
-            const bg = [...roster.rows.values()].filter((x) => x.kind === "background" && (x.pid || x.state === "working" || x.state === "blocked"));
-            if (!bg.length) { json(res, 200, { ok: false, msg: "No background agents are running." }); return; }
+            const liveClaude = [...roster.rows.values()].filter((x) => x.kind === "background" && (x.pid || x.state === "working" || x.state === "blocked"));
+            const allStates = adapters.getAllStates();
+            const liveOther = [...allStates.values()].filter((s) => s.harness !== "claude" && s.kind === "background" && (s.state === "working" || s.state === "waiting" || s.state === "quiet"));
+            const total = liveClaude.length + liveOther.length;
+            if (!total) { json(res, 200, { ok: false, msg: "No background agents are currently running to broadcast to." }); return; }
             const out = [];
-            for (const x of bg) out.push(await message(x.sessionId, text));
-            json(res, 200, { ok: out.every((o) => o.ok), msg: `Sent to ${out.filter((o) => o.ok).length} of ${bg.length} background agents` }); return;
+            for (const x of liveClaude) out.push(await message(x.sessionId, text));
+            for (const x of liveOther) out.push(await message(x.id, text));
+            const success = out.filter((o) => o.ok).length;
+            json(res, 200, { ok: success > 0, msg: `Broadcast sent to ${success} of ${total} active background agents.` }); return;
           }
           json(res, 200, await message(String(body.target || ""), text)); return;
         }

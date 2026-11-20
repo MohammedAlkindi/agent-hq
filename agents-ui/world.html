@@ -752,13 +752,14 @@ header{flex-wrap:wrap;row-gap:8px}
     <div class="menu" id="menu" role="listbox" hidden></div>
     <form class="pbox" id="pbox" autocomplete="off">
       <button type="button" class="target" id="tbtn" aria-haspopup="listbox" aria-expanded="false"><span class="dot"></span><span class="nm">New agent</span><span aria-hidden="true">▾</span></button>
-      <textarea id="ptext" rows="1" placeholder="Tell an agent what to do. Type @ to pick one." aria-label="Prompt"></textarea>
+      <textarea id="ptext" rows="1" placeholder="Tell an agent what to do. Type @all or /distribute to fan out." aria-label="Prompt"></textarea>
       <div class="opts" id="opts">
         <select id="folder" aria-label="Folder for the new agent"></select>
         <select id="harness" aria-label="Harness for the new agent">
           <option value="claude">Claude</option>
           <option value="antigravity">Antigravity</option>
           <option value="codex">Codex</option>
+          <option value="all">⚡ Distribute / Fan out (All)</option>
         </select>
         <select id="model" aria-label="Model for the new agent">
           <option value="">Default model</option><option value="opus">Opus</option><option value="sonnet">Sonnet</option><option value="haiku">Haiku</option><option value="fable">Fable</option>

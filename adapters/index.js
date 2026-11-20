@@ -32,12 +32,13 @@ function parseHarnessFromPrompt(text, fallbackHarness = "claude") {
   let cleanText = String(text || "").trim();
   let harness = fallbackHarness || "claude";
 
-  const m = /^\/(antigravity|agy|gemini|codex|generic|openai|claude)\b\s*/i.exec(cleanText);
+  const m = /^\/(antigravity|agy|gemini|codex|generic|openai|claude|distribute|fanout|all)\b\s*/i.exec(cleanText);
   if (m) {
     const raw = m[1].toLowerCase();
     if (raw === "antigravity" || raw === "agy" || raw === "gemini") harness = "antigravity";
     else if (raw === "codex" || raw === "generic" || raw === "openai") harness = "codex";
     else if (raw === "claude") harness = "claude";
+    else if (raw === "distribute" || raw === "fanout" || raw === "all") harness = "all";
     cleanText = cleanText.slice(m[0].length).trim();
   }
   return { harness, text: cleanText };
