@@ -1,6 +1,6 @@
 {
-  "_about": "Policy for the Agent HQ dispatcher (dispatcher.js). It drafts a reply for every session waiting on Mohammed and logs what it would send. mode 'shadow' sends nothing; no other mode is implemented yet. Edit freely; the dashboard reloads this file on every draft.",
-  "mode": "shadow",
+  "_about": "Policy for the Agent HQ dispatcher (dispatcher.js). It drafts a reply for every session waiting on Mohammed and logs what it would send. mode 'level1' allows human-in-the-loop sending via the dispatch UI; mode 'shadow' drafts only without sending. Edit freely; the dashboard reloads this file on every draft.",
+  "mode": "level1",
   "model": "sonnet",
   "minConfidence": 0.8,
   "concurrency": 2,

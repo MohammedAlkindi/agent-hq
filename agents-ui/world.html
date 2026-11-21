@@ -663,6 +663,59 @@ header{flex-wrap:wrap;row-gap:8px}
 @media (max-width:1250px){.pgrid.three{grid-template-columns:1fr 1fr}.pgrid.three>:last-child{grid-column:1/-1}.minibar{width:60px}}
 @media (max-width:1180px){.badges .badge:nth-child(n+3){display:none}.upd{display:none}}
 @media (max-width:900px){.mgrid{grid-template-columns:repeat(3,1fr)}.kpis{grid-template-columns:repeat(2,1fr)}.pgrid,.pgrid.three{grid-template-columns:1fr}.tl-axis,.tl-row{grid-template-columns:150px 1fr 44px}.charts{grid-template-columns:1fr}.annex{grid-template-columns:1fr}.room.wide{grid-column:auto}.opts select{max-width:110px}}
+#audio-toggle{font-size:13px}
+#audio-toggle[aria-pressed=false]{opacity:.6;filter:grayscale(1)}
+.btn-accept{background:var(--good)!important;color:#fff!important;font-weight:700!important;border-color:color-mix(in oklab,var(--good) 80%,black)!important;box-shadow:0 1px 3px rgba(12,163,12,.35);display:inline-flex;align-items:center;gap:5px}
+.btn-accept:hover{filter:brightness(1.1);box-shadow:0 2px 6px rgba(12,163,12,.5)}
+
+/* modal diff viewer */
+.modal-backdrop{position:fixed;inset:0;z-index:85;background:rgba(0,0,0,.65);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:20px}
+.modal-backdrop[hidden]{display:none!important}
+.modal-card{background:var(--surface);color:var(--ink);border:1px solid var(--grid);border-radius:16px;width:min(1040px,94vw);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(0,0,0,.35);overflow:hidden;animation:modalPop .2s cubic-bezier(.16,1,.3,1)}
+@keyframes modalPop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+.modal-head{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--grid);background:var(--page)}
+.modal-title{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14.5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.diff-stats{font-size:12px;font-weight:600;display:inline-flex;gap:6px;margin-left:6px}
+.diff-stat-add{color:var(--good)} .diff-stat-del{color:var(--crit)}
+.modal-actions{display:flex;align-items:center;gap:8px}
+.modal-body{padding:0;overflow:auto;flex:1;background:var(--surface);font-family:ui-monospace,"Cascadia Code","Segoe UI Mono",Menlo,Consolas,monospace;font-size:12.5px;line-height:1.55}
+.diff-table{width:100%;border-collapse:collapse}
+.diff-tr{border-bottom:1px solid rgba(0,0,0,.04)}
+:root[data-theme=dark] .diff-tr{border-bottom-color:rgba(255,255,255,.04)}
+.diff-tr.add{background:color-mix(in oklab,var(--good) 12%,transparent)}
+.diff-tr.del{background:color-mix(in oklab,var(--crit) 12%,transparent)}
+.diff-tr.hunk{background:color-mix(in oklab,var(--accent) 10%,transparent);color:var(--accent);font-weight:600}
+.diff-num{width:44px;padding:2px 8px;text-align:right;color:var(--muted);user-select:none;font-size:11px;vertical-align:top;border-right:1px solid var(--grid)}
+.diff-sign{width:20px;text-align:center;user-select:none;font-weight:700}
+.diff-code{padding:2px 10px;white-space:pre-wrap;word-break:break-all}
+.diff-empty{padding:30px;text-align:center;color:var(--muted)}
+.diff-split-pane{display:grid;grid-template-columns:1fr 1fr;width:100%}
+.diff-split-col{overflow:hidden;border-right:1px solid var(--grid)}
+.diff-split-col:last-child{border-right:none}
+
+/* live terminal drawer */
+.term-drawer{position:fixed;bottom:0;left:0;right:0;height:330px;max-height:55vh;z-index:78;background:#0a0d14;color:#38bdf8;border-top:2px solid var(--accent);box-shadow:0 -10px 40px rgba(0,0,0,.45);display:flex;flex-direction:column;transform:translateY(0);transition:transform .24s cubic-bezier(.16,1,.3,1);font-family:ui-monospace,"Cascadia Code","Segoe UI Mono",Menlo,Consolas,monospace}
+.term-drawer[hidden]{display:none!important}
+.term-head{display:flex;align-items:center;gap:12px;padding:8px 16px;background:#111622;border-bottom:1px solid #1e2638}
+.term-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#f1f5f9;flex:1}
+.term-dot{width:9px;height:9px;border-radius:50%;background:#10b981;box-shadow:0 0 6px #10b981;animation:pulse 1.6s ease-in-out infinite}
+.term-badge{font-size:10px;font-weight:800;background:rgba(16,185,129,.2);color:#10b981;border:1px solid rgba(16,185,129,.4);padding:1px 6px;border-radius:4px}
+.term-controls{display:flex;gap:6px;align-items:center}
+.term-btn{background:#1e2638!important;color:#cbd5e1!important;border-color:#334155!important;font-size:11.5px!important;padding:3px 10px!important}
+.term-btn:hover{background:#28334a!important;color:#fff!important}
+.term-btn.on{border-color:#38bdf8!important;color:#38bdf8!important}
+.term-body{flex:1;overflow:auto;padding:12px 18px;font-size:12px;line-height:1.6}
+.term-line{white-space:pre-wrap;word-break:break-all}
+.term-line.info{color:#94a3b8}
+.term-line.tool{color:#38bdf8;font-weight:600}
+.term-line.cmd{color:#facc15}
+.term-line.err{color:#f87171;font-weight:600}
+.term-line.thought{color:#a78bfa;font-style:italic}
+.term-line.prompt{color:#4ade80;font-weight:600}
+.term-cursor{display:inline-block;width:8px;height:13px;vertical-align:-1px;background:#38bdf8;animation:blinkc .85s steps(2) infinite}
+.mini-diff-btn{font-size:11px!important;padding:1px 8px!important;margin-left:8px;border-color:var(--accent)!important;color:var(--accent)!important}
+.mini-diff-btn:hover{background:color-mix(in oklab,var(--accent) 15%,transparent)!important}
+
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style></head>
 <body class="day">
@@ -678,6 +731,7 @@ header{flex-wrap:wrap;row-gap:8px}
   <div class="sp"></div>
   <input class="search" id="q" type="search" placeholder="Find an agent, file, task…" aria-label="Find an agent">
   <span class="live" id="live" title="How the page gets updates"><i></i><span id="upd">Connecting</span></span>
+  <button class="ibtn" id="audio-toggle" type="button" aria-label="Toggle 8-bit sound effects" title="Audio on (8-bit chimes enabled) · Click to mute"><span id="audio-icon">🔊</span></button>
   <div class="popwrap">
     <button class="ibtn" id="legendbtn" aria-haspopup="dialog" aria-expanded="false" aria-label="What am I looking at?">?</button>
     <div class="pop legend" id="legend" role="dialog" aria-label="Legend" hidden></div>
@@ -741,6 +795,44 @@ header{flex-wrap:wrap;row-gap:8px}
 </main>
 
 <aside id="drawer" aria-label="Agent details" aria-hidden="true"><button class="btn x" id="dclose">Close</button><div id="dbody"></div></aside>
+
+<!-- Inline Git Diff Inspector Modal -->
+<div id="diff-modal" class="modal-backdrop" hidden>
+  <div class="modal-card">
+    <div class="modal-head">
+      <div class="modal-title">
+        <span class="m-ic">📄</span>
+        <span id="diff-file-title">File Diff</span>
+        <span class="diff-stats" id="diff-stats"></span>
+      </div>
+      <div class="modal-actions">
+        <div class="seg" id="diff-mode-seg">
+          <button type="button" class="btn active" id="diff-mode-unified">Unified</button>
+          <button type="button" class="btn" id="diff-mode-split">Side-by-side</button>
+        </div>
+        <button type="button" class="btn x" id="diff-close" aria-label="Close diff modal">✕ Close</button>
+      </div>
+    </div>
+    <div class="modal-body" id="diff-body"></div>
+  </div>
+</div>
+
+<!-- In-Browser Live Log / Terminal Stream Drawer -->
+<aside id="term-drawer" class="term-drawer" aria-label="Live logs terminal" hidden>
+  <div class="term-head">
+    <div class="term-title">
+      <span class="term-dot"></span>
+      <span id="term-agent-title">Terminal</span>
+      <span class="term-badge" id="term-badge">LIVE</span>
+    </div>
+    <div class="term-controls">
+      <button class="btn term-btn on" id="term-autoscroll" type="button" aria-pressed="true">Auto-scroll</button>
+      <button class="btn term-btn" id="term-clear" type="button">Clear</button>
+      <button class="btn x" id="term-close" type="button" aria-label="Close terminal">✕</button>
+    </div>
+  </div>
+  <div class="term-body" id="term-body" tabindex="0"></div>
+</aside>
 
 <div id="dock">
   <div class="tray" id="tray">
@@ -1459,11 +1551,16 @@ function fillDrawer(id) {
   }) : [h("div", { class: "note", text: "No tool calls in the last 24 hours." })]));
   const sec = (title, items) => items.length ? h("div", { class: "dsec" }, h("h4", { text: title }), h("div", { class: "list" }, ...items)) : null;
   const helpers = sec("Helpers (subagents, last 2 hours)", (s.helpers || []).map((x) => h("div", { class: "row" }, si(x.running ? "working" : "finished"), h("span", { text: x.what }), h("span", { class: "m", text: x.running ? "working" : "done " + ago(now - x.at) + " ago" }))));
-  const files = sec("Files it edited (90 min)", (s.files || []).map((f) => h("div", { class: "row" }, h("span", { text: f.p }), h("span", { class: "m", text: ago(now - f.at) + " ago" }))));
+  const files = sec("Files it edited (90 min)", (s.files || []).map((f) =>
+    h("div", { class: "row", style: { cursor: "pointer" }, onclick: () => openDiffModal(s.id, f.p) },
+      h("span", { text: f.p }),
+      h("button", { class: "btn mini-diff-btn", type: "button", title: "View git diff", onclick: (e) => { e.stopPropagation(); openDiffModal(s.id, f.p); } }, "Diff"),
+      h("span", { class: "m", text: ago(now - f.at) + " ago" }))));
   const peers = sec("Messages from other sessions (2 hours)", (s.peers || []).slice().reverse().map((p) => h("div", { class: "row" }, h("span", { text: "✉ " + p.from }), h("span", { class: "m", text: ago(now - p.at) + " ago" }))));
   const queued = sec("Your messages waiting for it", (D.queue || []).filter((q) => q.sid === s.id).map((q) => h("div", { class: "row" }, h("span", { text: q.text }), h("span", { class: "m", text: "queued " + ago(now - q.at) + " ago" }))));
 
   const acts = h("div", { class: "acts" });
+  acts.append(h("button", { class: "btn term-trigger-btn", type: "button", onclick: () => openTerminalDrawer(s.id) }, "📟 Live logs"));
   if (s.kind === "background" && s.state !== "closed") {
     acts.append(h("button", { class: "btn", onclick: () => { setTarget({ type: "bg", sid: s.id, name: s.title }); $("#ptext").focus(); } }, "Message it"),
       h("button", { class: "btn", onclick: () => act("/api/attach", s.id) }, "Open in a terminal"));
@@ -1488,7 +1585,207 @@ function fillDrawer(id) {
     : s.kind === "desktop" ? h("p", { class: "note", text: "Desktop sessions take messages only inside the Claude app. The box copies your message so you can paste it there." }) : null;
   put(body, head, acts, note, stuckNote, s.draft ? h("div", { class: "dsec" }, h("h4", { text: "Drafted reply" }), draftBox(s)) : null, kv, met, tools, sec("Recent failed tool calls", errs), helpers, queued, files, peers);
 }
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") { if (!$("#menu").hidden) closeMenu(); else if (OPEN) closeDrawer(); } });
+
+// ---------------------------------------------------------------- git diff modal
+let currentDiffData = null;
+let currentDiffMode = "unified";
+
+async function openDiffModal(sid, filePath) {
+  const modal = $("#diff-modal"), body = $("#diff-body"), title = $("#diff-file-title"), stats = $("#diff-stats");
+  if (!modal || !body) return;
+  modal.hidden = false;
+  title.textContent = filePath ? `Diff: ${filePath.split("/").pop()}` : "Diff: Session changes";
+  put(body, h("div", { class: "diff-empty", text: "Fetching git diff from /api/diff…" }));
+  put(stats, "");
+
+  try {
+    const url = `/api/diff?sid=${encodeURIComponent(sid)}` + (filePath ? `&file=${encodeURIComponent(filePath)}` : "");
+    const res = await fetch(url, { headers: { "x-agents-token": TOKEN } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch { data = { diff: text }; }
+    const diffRaw = data.diff || (typeof data === "string" ? data : "");
+    if (!diffRaw.trim()) {
+      put(body, h("div", { class: "diff-empty", text: "No uncommitted git changes found for this session." }));
+      return;
+    }
+    currentDiffData = parseUnifiedDiff(diffRaw);
+    renderDiffModalView(currentDiffData, currentDiffMode);
+  } catch (err) {
+    put(body, h("div", { class: "diff-empty", style: { color: "var(--crit)" }, text: `Could not load diff: ${err.message}` }));
+  }
+}
+
+function closeDiffModal() {
+  const m = $("#diff-modal");
+  if (m) m.hidden = true;
+}
+
+function parseUnifiedDiff(raw) {
+  const lines = raw.split(/\r?\n/);
+  let oldL = 0, newL = 0;
+  let addCount = 0, delCount = 0;
+  const parsed = [];
+
+  for (const line of lines) {
+    if (line.startsWith("@@")) {
+      const match = /@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
+      if (match) {
+        oldL = parseInt(match[1], 10);
+        newL = parseInt(match[2], 10);
+      }
+      parsed.push({ type: "hunk", text: line, oldL: "", newL: "" });
+    } else if (line.startsWith("+") && !line.startsWith("+++")) {
+      addCount++;
+      parsed.push({ type: "add", text: line.slice(1), oldL: "", newL: newL++ });
+    } else if (line.startsWith("-") && !line.startsWith("---")) {
+      delCount++;
+      parsed.push({ type: "del", text: line.slice(1), oldL: oldL++, newL: "" });
+    } else if (line.startsWith("diff --git") || line.startsWith("index ") || line.startsWith("---") || line.startsWith("+++")) {
+      parsed.push({ type: "hunk", text: line, oldL: "", newL: "" });
+    } else {
+      parsed.push({ type: "ctx", text: line.startsWith(" ") ? line.slice(1) : line, oldL: oldL ? oldL++ : "", newL: newL ? newL++ : "" });
+    }
+  }
+  return { lines: parsed, addCount, delCount };
+}
+
+function renderDiffModalView(diff, mode) {
+  const body = $("#diff-body"), stats = $("#diff-stats");
+  if (!diff || !body) return;
+  put(stats,
+    diff.addCount ? h("span", { class: "diff-stat-add", text: `+${diff.addCount}` }) : null,
+    diff.delCount ? h("span", { class: "diff-stat-del", text: `-${diff.delCount}` }) : null);
+
+  if (mode === "split") {
+    const leftRows = [], rightRows = [];
+    for (const row of diff.lines) {
+      if (row.type === "del") {
+        leftRows.push(h("tr", { class: "diff-tr del" }, h("td", { class: "diff-num", text: String(row.oldL || "") }), h("td", { class: "diff-sign", text: "-" }), h("td", { class: "diff-code", text: row.text })));
+      } else if (row.type === "add") {
+        rightRows.push(h("tr", { class: "diff-tr add" }, h("td", { class: "diff-num", text: String(row.newL || "") }), h("td", { class: "diff-sign", text: "+" }), h("td", { class: "diff-code", text: row.text })));
+      } else if (row.type === "hunk") {
+        leftRows.push(h("tr", { class: "diff-tr hunk" }, h("td", { colspan: 3, class: "diff-code", text: row.text })));
+        rightRows.push(h("tr", { class: "diff-tr hunk" }, h("td", { colspan: 3, class: "diff-code", text: row.text })));
+      } else {
+        leftRows.push(h("tr", { class: "diff-tr" }, h("td", { class: "diff-num", text: String(row.oldL || "") }), h("td", { class: "diff-sign", text: " " }), h("td", { class: "diff-code", text: row.text })));
+        rightRows.push(h("tr", { class: "diff-tr" }, h("td", { class: "diff-num", text: String(row.newL || "") }), h("td", { class: "diff-sign", text: " " }), h("td", { class: "diff-code", text: row.text })));
+      }
+    }
+    const pane = h("div", { class: "diff-split-pane" },
+      h("div", { class: "diff-split-col" }, h("table", { class: "diff-table" }, ...leftRows)),
+      h("div", { class: "diff-split-col" }, h("table", { class: "diff-table" }, ...rightRows)));
+    put(body, pane);
+  } else {
+    const rows = diff.lines.map((l) =>
+      h("tr", { class: "diff-tr " + l.type },
+        h("td", { class: "diff-num", text: String(l.oldL || "") }),
+        h("td", { class: "diff-num", text: String(l.newL || "") }),
+        h("td", { class: "diff-sign", text: l.type === "add" ? "+" : l.type === "del" ? "-" : " " }),
+        h("td", { class: "diff-code", text: l.text })));
+    put(body, h("table", { class: "diff-table" }, ...rows));
+  }
+}
+
+// ---------------------------------------------------------------- live terminal drawer
+let currentTermSid = null;
+let termAutoScroll = true;
+let termPollTimer = null;
+
+function openTerminalDrawer(sid) {
+  currentTermSid = sid;
+  const s = D && D.sessions.find((x) => x.id === sid);
+  const drawer = $("#term-drawer"), title = $("#term-agent-title"), body = $("#term-body");
+  if (!drawer || !body) return;
+  drawer.hidden = false;
+  title.textContent = `Terminal: ${s ? s.title : sid} (${s ? s.harness || "agent" : "session"})`;
+  renderTerminalLogs(s);
+  if (termPollTimer) clearInterval(termPollTimer);
+  termPollTimer = setInterval(() => {
+    if (drawer.hidden || currentTermSid !== sid) return;
+    const cur = D && D.sessions.find((x) => x.id === sid);
+    if (cur) renderTerminalLogs(cur, true);
+  }, 2500);
+}
+
+function closeTerminalDrawer() {
+  const drawer = $("#term-drawer");
+  if (drawer) drawer.hidden = true;
+  if (termPollTimer) { clearInterval(termPollTimer); termPollTimer = null; }
+  currentTermSid = null;
+}
+
+function renderTerminalLogs(s) {
+  const body = $("#term-body");
+  if (!body) return;
+  if (!s) {
+    put(body, h("div", { class: "term-line err", text: "[ERROR] Session not found or closed." }));
+    return;
+  }
+  const lines = [];
+  lines.push({ cls: "info", text: `[SYSTEM] Connected to live agent stream: ${s.title} (ID: ${s.id})` });
+  lines.push({ cls: "info", text: `[CONFIG] Harness: ${(s.harness || "claude").toUpperCase()} · Model: ${s.model || "default"} · State: ${s.state}` });
+  lines.push({ cls: "info", text: `[DIR] Workspace: ${s.where || s.room || "~"} ${s.branch ? "(@" + s.branch + ")" : ""}` });
+
+  if (s.prompt) lines.push({ cls: "prompt", text: `[USER PROMPT] > ${s.prompt}` });
+  if (s.activity) {
+    lines.push({ cls: "tool", text: `[ACTIVE TOOL] ${s.activity.name}: ${s.activity.what || "running"}` });
+  }
+  for (const err of s.errLog || []) {
+    lines.push({ cls: "err", text: `[FAIL ${clock(err.at)}] ${err.tool}: ${err.text}` });
+  }
+  if (s.said) lines.push({ cls: "thought", text: `[AGENT OUTPUT] "${s.said}"` });
+  for (const hl of s.helpers || []) {
+    lines.push({ cls: "info", text: `[HELPER] ${hl.what} (${hl.running ? "running" : "finished"})` });
+  }
+
+  lines.push({ cls: "cmd", text: `agent@agent-hq [${s.turns} turns] $ ` });
+
+  put(body, ...lines.map((l, i) =>
+    h("div", { class: "term-line " + l.cls },
+      l.text,
+      i === lines.length - 1 ? h("span", { class: "term-cursor" }) : null)));
+
+  if (termAutoScroll) {
+    body.scrollTop = body.scrollHeight;
+  }
+}
+
+// Diff modal and terminal controls initialization
+$("#diff-close").addEventListener("click", closeDiffModal);
+$("#diff-modal").addEventListener("click", (e) => { if (e.target === $("#diff-modal")) closeDiffModal(); });
+$("#diff-mode-unified").addEventListener("click", () => {
+  currentDiffMode = "unified";
+  $("#diff-mode-unified").classList.add("active");
+  $("#diff-mode-split").classList.remove("active");
+  if (currentDiffData) renderDiffModalView(currentDiffData, "unified");
+});
+$("#diff-mode-split").addEventListener("click", () => {
+  currentDiffMode = "split";
+  $("#diff-mode-split").classList.add("active");
+  $("#diff-mode-unified").classList.remove("active");
+  if (currentDiffData) renderDiffModalView(currentDiffData, "split");
+});
+$("#term-close").addEventListener("click", closeTerminalDrawer);
+$("#term-clear").addEventListener("click", () => { put($("#term-body"), ""); });
+$("#term-autoscroll").addEventListener("click", () => {
+  termAutoScroll = !termAutoScroll;
+  const b = $("#term-autoscroll");
+  b.classList.toggle("on", termAutoScroll);
+  b.setAttribute("aria-pressed", String(termAutoScroll));
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    const diffM = $("#diff-modal");
+    if (diffM && !diffM.hidden) { closeDiffModal(); return; }
+    const termD = $("#term-drawer");
+    if (termD && !termD.hidden) { closeTerminalDrawer(); return; }
+    if (!$("#menu").hidden) closeMenu();
+    else if (OPEN) closeDrawer();
+  }
+});
 
 // ---------------------------------------------------------------- prompt box
 const ptext = $("#ptext"), menu = $("#menu");

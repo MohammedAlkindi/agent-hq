@@ -263,4 +263,20 @@ function state(now) {
   };
 }
 
-module.exports = { start, consider, draftFor, rate, redraft, state, policy };
+function getDraft(key) {
+  if (drafts[key]) return drafts[key];
+  return Object.values(drafts).filter((d) => d.id === key).sort((a, b) => b.at - a.at)[0] || null;
+}
+
+function markSent(key, text) {
+  const d = getDraft(key);
+  if (!d) return false;
+  d.sent = true;
+  d.sentAt = Date.now();
+  if (text) d.sentText = text;
+  saveDrafts();
+  audit({ type: "send", key: d.key, id: d.id, text: text || d.reply, at: d.sentAt });
+  return true;
+}
+
+module.exports = { start, consider, draftFor, rate, redraft, state, policy, getDraft, markSent };

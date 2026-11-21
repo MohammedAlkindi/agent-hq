@@ -67,6 +67,7 @@ function trayRender(d) {
       s.waitingFor ? h("div", { style: { marginTop: "6px" } }, h("span", { class: "tc-wait", text: "Waiting for: " + String(s.waitingFor).replace(/_/g, " ") })) : null,
       draftBox(s),
       h("div", { class: "tc-acts" },
+        s.draft && s.draft.reply ? h("button", { class: "btn btn-accept", type: "button", title: "1-Click Accept & Send (Ctrl+Enter)", onclick: () => typeof acceptAndSendDraft === "function" && acceptAndSendDraft(s, s.draft) }, "⚡ Accept & Send") : null,
         rank !== 1 ? h("button", { class: "btn", type: "button", onclick: () => { setTarget(reply); TRAY_OPEN = false; render(D); $("#ptext").focus(); } }, s.kind === "background" ? "Reply" : "Reply (copies)") : null,
         h("button", { class: "btn", type: "button", onclick: () => openDrawer(s.id) }, "Details"),
         h("button", { class: "btn", type: "button", onclick: () => markSeen(s, !n.seen) }, n.seen ? "Unsee" : "Seen")));
@@ -85,5 +86,16 @@ function trayFace(s) {
 function trayInit() {
   if (new URLSearchParams(location.search).has("tray")) TRAY_OPEN = true; // ?tray opens it on load
   $("#traybar").addEventListener("click", () => { TRAY_OPEN = !TRAY_OPEN; if (D) trayRender(D); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && TRAY_OPEN && $("#menu").hidden) { TRAY_OPEN = false; if (D) trayRender(D); } });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && TRAY_OPEN && $("#menu").hidden) { TRAY_OPEN = false; if (D) trayRender(D); }
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      if (TRAY_OPEN && D) {
+        const fresh = needsYou(D).filter((n) => !n.seen && n.s.draft && n.s.draft.reply);
+        if (fresh.length && typeof acceptAndSendDraft === "function") {
+          e.preventDefault();
+          acceptAndSendDraft(fresh[0].s, fresh[0].s.draft);
+        }
+      }
+    }
+  });
 }

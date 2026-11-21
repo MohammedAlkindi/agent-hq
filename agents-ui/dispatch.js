@@ -20,6 +20,34 @@ async function sendDraft(s, text) {
   tick();
 }
 
+async function acceptAndSendDraft(s, d) {
+  if (!d || !d.reply) return;
+  const t = replyTarget(s);
+  if (t.type === "desktop") {
+    await copy(d.reply, `Copied. Paste it into "${s.title}" in the Claude app.`);
+    if (typeof markSeen === "function") markSeen(s, true);
+    if (typeof chime === "function") chime("done");
+    return;
+  }
+  toast(`Delivering draft to ${s.title}…`);
+  try {
+    const r = await post("/api/dispatch/send", { sid: s.id, key: d.key, reply: d.reply });
+    toast(r.msg || (r.ok ? "Delivered draft!" : "Could not deliver draft."));
+    if (r.ok) {
+      if (typeof markSeen === "function") markSeen(s, true);
+      tick();
+      if (typeof chime === "function") chime("done");
+      return;
+    }
+  } catch {}
+  // Fallback to /api/prompt if /api/dispatch/send is not available
+  const r2 = await post("/api/prompt", { target: s.id, text: d.reply });
+  toast(r2.msg || (r2.ok ? "Sent." : "Could not send."));
+  if (typeof markSeen === "function") markSeen(s, true);
+  tick();
+  if (typeof chime === "function") chime("done");
+}
+
 async function rateDraft(key, verdict) {
   const r = await post("/api/dispatch/rate", { key, verdict });
   toast(r.msg);
@@ -46,6 +74,7 @@ function draftBox(s) {
     h("div", { class: "dhead2" }, h("span", { class: "dl " + (d.label || "") , text: LABELS[d.label] || d.label || "" }), h("span", { class: "dwhy", text: d.why || "" })),
     d.reply ? h("div", { class: "dreply", text: d.reply }) : h("div", { class: "dreply none", text: d.needsHuman ? `No draft: ${d.humanReason || "this one is yours"}` : "Nothing to send." }),
     h("div", { class: "dacts" },
+      d.reply ? h("button", { class: "btn btn-accept", type: "button", title: "1-Click Accept & Send (Ctrl+Enter)", onclick: () => acceptAndSendDraft(s, d) }, "⚡ Accept & Send") : null,
       d.reply ? h("button", { class: "btn", type: "button", onclick: () => sendDraft(s, d.reply) }, t.type === "desktop" ? "Copy reply" : t.type === "wake" ? "Wake & send" : "Send") : null,
       d.reply ? h("button", { class: "btn", type: "button", onclick: () => { setTarget(t); ptext.value = d.reply; grow(); ptext.focus(); } }, "Edit") : null,
       verdict, rate));

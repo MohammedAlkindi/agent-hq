@@ -52,6 +52,7 @@ const path = require("path");
 const http = require("http");
 const cp = require("child_process");
 const adapters = require("./adapters");
+const worktrees = require("./worktrees");
 
 const HOME = os.homedir();
 const CLAUDE = path.join(HOME, ".claude");
@@ -555,10 +556,26 @@ function nameFrom(text) {
   return one(w || "New agent", 40).replace(/…$/, "");
 }
 
-async function startAgent(text, cwd, model, harness = "claude") {
+async function startAgent(text, cwd, model, harness = "claude", options = {}) {
   const parsed = adapters.parseHarnessFromPrompt(text, harness);
   const targetHarness = parsed.harness;
-  const promptText = parsed.text;
+  let promptText = parsed.text;
+
+  let effectiveCwd = cwd || HOME;
+  let worktreeInfo = null;
+
+  const wantsIsolation = Boolean(options.isolate || options.worktree);
+  if (wantsIsolation) {
+    const isGit = await worktrees.findRepoRoot(effectiveCwd);
+    if (isGit) {
+      const name = nameFrom(promptText);
+      const wtRes = await worktrees.createWorktree({ repo: isGit, name });
+      if (wtRes.ok) {
+        effectiveCwd = wtRes.path;
+        worktreeInfo = wtRes;
+      }
+    }
+  }
 
   if (targetHarness === "all") {
     // Fan out and distribute task across harnesses or subtask slices (separated by '|')
@@ -570,12 +587,12 @@ async function startAgent(text, cwd, model, harness = "claude") {
     for (let i = 0; i < slices.length; i++) {
       const h = availableHarnesses[i % availableHarnesses.length];
       const sliceText = slices[i];
-      results.push(await startAgent(sliceText, cwd, model, h));
+      results.push(await startAgent(sliceText, effectiveCwd, model, h, options));
     }
     const successCount = results.filter((r) => r.ok).length;
     const msg = `Distributed ${slices.length} task slice${slices.length > 1 ? "s" : ""} across ${results.length} agents (${successCount} started).`;
     say(msg, successCount > 0);
-    return { ok: successCount > 0, msg, results };
+    return { ok: successCount > 0, msg, results, worktree: worktreeInfo };
   }
 
   if (targetHarness === "claude") {
@@ -583,16 +600,21 @@ async function startAgent(text, cwd, model, harness = "claude") {
     const args = ["--bg", "-n", name];
     if (/^(opus|sonnet|haiku|fable)$/.test(model || "")) args.push("--model", model);
     args.push("--", promptText);
-    const r = await claudeRun(args, { cwd });
+    const r = await claudeRun(args, { cwd: effectiveCwd });
     const m = /backgrounded\s*·\s*([0-9a-f]{8})/.exec(r.out);
     refreshRoster(Date.now(), true);
     listedAt = 0; relistUntil = Date.now() + 60e3; // so the new agent shows up within a poll or two
-    const msg = m ? `Started "${name}" in ${short(cwd)} (${m[1]})` : `Could not start Claude agent: ${firstLine(r.out) || r.err}`;
+    let msg = m ? `Started "${name}" in ${short(effectiveCwd)} (${m[1]})` : `Could not start Claude agent: ${firstLine(r.out) || r.err}`;
+    if (worktreeInfo) msg += ` [isolated worktree: ${short(worktreeInfo.path)}]`;
     say(msg, !!m);
-    return { ok: !!m, msg };
+    return { ok: !!m, msg, worktree: worktreeInfo };
   }
 
-  const res = await adapters.startAgent({ harness: targetHarness, text: promptText, cwd, model });
+  const res = await adapters.startAgent({ harness: targetHarness, text: promptText, cwd: effectiveCwd, model });
+  if (worktreeInfo && res.ok) {
+    res.msg += ` [isolated worktree: ${short(worktreeInfo.path)}]`;
+    res.worktree = worktreeInfo;
+  }
   say(res.msg, res.ok);
   return res;
 }
@@ -718,18 +740,21 @@ function readBoard() {
   return out;
 }
 
-function worktrees(now) {
+function scanWorktreeDirs(now) {
   const out = [];
-  let ds = [];
-  try { ds = fs.readdirSync(WT, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith(".")); } catch { return out; }
-  for (const d of ds) {
-    const p = path.join(WT, d.name);
-    let m = 0;
-    for (const probe of ["", "README.md", "package.json"]) {
-      try { m = Math.max(m, fs.statSync(path.join(p, probe)).mtimeMs); } catch {}
+  const dirs = [path.join(HOME, "worktrees"), WT];
+  for (const parent of dirs) {
+    let ds = [];
+    try { ds = fs.readdirSync(parent, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith(".")); } catch { continue; }
+    for (const d of ds) {
+      const p = path.join(parent, d.name);
+      let m = 0;
+      for (const probe of ["", "README.md", "package.json", ".git"]) {
+        try { m = Math.max(m, fs.statSync(path.join(p, probe)).mtimeMs); } catch {}
+      }
+      const git = fs.existsSync(path.join(p, ".git"));
+      out.push({ name: d.name, path: p, displayPath: short(p), age: now - m, git });
     }
-    const git = fs.existsSync(path.join(p, ".git"));
-    out.push({ name: d.name, age: now - m, git });
   }
   return out.sort((a, b) => a.age - b.age);
 }
@@ -833,7 +858,7 @@ function snapshot() {
   }
 
   const tasks = appTasks(now);
-  const wts = worktrees(now);
+  const wts = scanWorktreeDirs(now);
   const count = (s) => sessions.filter((x) => x.state === s).length;
   return {
     now,
@@ -1228,7 +1253,8 @@ function serve() {
             try { isDir = fs.statSync(cwd).isDirectory(); } catch {}
             if (!isDir) { json(res, 400, { ok: false, msg: `Folder not found: ${cwd}` }); return; }
             const harness = body.harness || "claude";
-            json(res, 200, await startAgent(text, cwd, body.model, harness)); return;
+            const isolate = Boolean(body.isolate || body.worktree);
+            json(res, 200, await startAgent(text, cwd, body.model, harness, { isolate })); return;
           }
           if (body.target === "all") {
             const liveClaude = [...roster.rows.values()].filter((x) => x.kind === "background" && (x.pid || x.state === "working" || x.state === "blocked"));
@@ -1248,6 +1274,35 @@ function serve() {
         if (u === "/api/attach") { json(res, 200, attachAgent(String(body.target || ""))); return; }
         if (u === "/api/dispatch/rate") { json(res, 200, dispatcher.rate(String(body.key || ""), String(body.verdict || ""), body.note)); return; }
         if (u === "/api/dispatch/redraft") { json(res, 200, dispatcher.redraft(String(body.key || ""))); return; }
+        if (u === "/api/dispatch/send") {
+          const key = String(body.key || "").trim();
+          const draft = dispatcher.getDraft(key);
+          const sid = String(body.sid || (draft && draft.id) || "").trim();
+          const sendText = String(body.text || (draft && draft.reply) || "").trim();
+          if (!sid) { json(res, 400, { ok: false, msg: "Session ID is required." }); return; }
+          if (!sendText) { json(res, 400, { ok: false, msg: "No message text to send." }); return; }
+          const resDeliver = await message(sid, sendText);
+          if (resDeliver.ok && key) {
+            dispatcher.markSent(key, sendText);
+          }
+          json(res, 200, { ok: resDeliver.ok, msg: resDeliver.msg, sid, sentText });
+          return;
+        }
+        if (u === "/api/worktree/create") {
+          const out = await worktrees.createWorktree(body);
+          json(res, out.ok ? 200 : 400, out);
+          return;
+        }
+        if (u === "/api/worktree/merge") {
+          const out = await worktrees.mergeWorktree(body);
+          json(res, out.ok ? 200 : 400, out);
+          return;
+        }
+        if (u === "/api/worktree/cleanup") {
+          const out = await worktrees.cleanupWorktree(body);
+          json(res, out.ok ? 200 : 400, out);
+          return;
+        }
       } catch (e) { json(res, 500, { ok: false, msg: String(e && e.message || e) }); return; }
       finally { schedulePush(0); }
       json(res, 404, { ok: false, msg: "Unknown action." }); return;
@@ -1261,6 +1316,41 @@ function serve() {
       streams.add(res);
       req.on("close", () => streams.delete(res));
       try { res.write("event: state\ndata: " + JSON.stringify(snapshot()) + "\n\n"); } catch {}
+      return;
+    }
+    if (u === "/api/diff") {
+      const q = new URLSearchParams((req.url || "").split("?")[1] || "");
+      const sid = String(q.get("sid") || "").trim();
+      if (!sid) { json(res, 400, { ok: false, msg: "sid parameter is required" }); return; }
+      const snap = snapshot();
+      const s = snap.sessions.find((x) => x.id === sid || (x.short && x.short === sid));
+      const diffResult = await worktrees.getDiffForSession(s, adapters.getAllStates());
+      json(res, diffResult.ok ? 200 : 404, diffResult);
+      return;
+    }
+    if (u === "/api/worktrees") {
+      const q = new URLSearchParams((req.url || "").split("?")[1] || "");
+      const list = await worktrees.listWorktrees(q.get("repo") || "");
+      json(res, 200, { ok: true, worktrees: list });
+      return;
+    }
+    if (u === "/api/logs") {
+      const q = new URLSearchParams((req.url || "").split("?")[1] || "");
+      const sid = String(q.get("sid") || "").trim();
+      const tailCount = Math.min(Math.max(parseInt(q.get("tail") || "100", 10), 1), 500);
+      const allStates = adapters.getAllStates();
+      const st = allStates.get(sid) || [...allStates.values()].find((x) => x.id === sid);
+      if (!st || !st.file || !fs.existsSync(st.file)) {
+        json(res, 404, { ok: false, msg: "Session transcript not found" });
+        return;
+      }
+      try {
+        const content = fs.readFileSync(st.file, "utf8");
+        const lines = content.split("\n").filter(Boolean).slice(-tailCount);
+        json(res, 200, { ok: true, sid, totalLines: lines.length, lines });
+      } catch (err) {
+        json(res, 500, { ok: false, msg: err.message });
+      }
       return;
     }
     if (u === "/api/dispatch") {
