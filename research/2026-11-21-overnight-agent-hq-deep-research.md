@@ -621,3 +621,101 @@ With Wave 10 complete, the research encompasses:
 - System architecture and execution roadmap (Waves 7–8).
 - Failure taxonomy and algorithmic defenses (Wave 9).
 - Telemetry normalization, economic tiered routing, and developer KPIs (Wave 10).
+
+
+---
+
+## 19. Wave 11: Security, Sandbox Isolation & Host Credential Boundary (The Airlock Spec)
+
+* **Timestamp:** 2026-11-21 05:05 PT (Iteration 9)
+* **Focus:** Threat modeling for multi-agent autonomous execution, host filesystem security, secret filtering proxies, and the dual-zone "Airlock" isolation architecture.
+
+### 19.1 Threat Modeling for Autonomous Coding Agents
+
+Granting LLM agents terminal execution privileges (`run_command`, `bash`, `npm test`) introduces severe threat vectors that traditional IDEs do not face:
+
+```text
+ ┌────────────────────────────────────────────────────────┐
+ │                    ATTACK VECTORS                      │
+ ├────────────────────────────────────────────────────────┤
+ │ 1. Secret Exfiltration: Reads ~/.ssh, ~/.aws, .env     │
+ │ 2. Supply-Chain Poisoning: Malicious postinstall hooks │
+ │ 3. Host System Destruction: Erroneous `rm -rf /` or rm │
+ │ 4. Repository Pollution: Accidental staging of private │
+ │    API keys, session logs, or desktop screenshots      │
+ └────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 19.2 The Dual-Zone "Airlock" Isolation Architecture
+
+To balance developer velocity with strict host security, Agent HQ 2.0 adopts a **Dual-Zone Execution Model**:
+
+```text
+               ┌──────────────────────────────┐
+               │    AGENT HQ DISPATCHER       │
+               └──────────────┬───────────────┘
+                              │
+               Repo Trust Evaluation Gate
+               ┌──────────────┴───────────────┐
+       Trusted Internal Repo         Untrusted OSS / PR Review
+               │                              │
+               ▼                              ▼
+    ┌────────────────────┐         ┌────────────────────┐
+    │       ZONE A       │         │       ZONE B       │
+    │  Host Git Worktree │         │  Airlock Container │
+    ├────────────────────┤         ├────────────────────┤
+    │ • Zero VM overhead │         │ • Ephemeral Docker │
+    │ • Full local dev   │         │ • Stripped Host ENV│
+    │ • ~/worktrees/<sid>│         │ • Loopback Blocked │
+    │ • Fast turnaround  │         │ • Read-Only Root   │
+    └────────────────────┘         └────────────────────┘
+```
+
+#### Zone Specifications:
+1. **Zone A (Trusted Host Worktrees):**
+   * Default mode for internal repositories owned by the developer.
+   * Leverages `worktrees.js` to spawn `~/worktrees/<sid>` within seconds.
+   * Enforces local file path boundaries: agents are blocked from navigating outside the repository root.
+2. **Zone B (Airlock Sandboxes):**
+   * Triggered when reviewing external PRs, untrusted forks, or repositories with unvetted dependencies.
+   * Runs in an ephemeral micro-container or Windows Sandbox namespace with no access to host `~/.ssh`, `~/.aws`, or browser cookies.
+   * Outbound network egress is restricted to package registries (`registry.npmjs.org`, `pypi.org`) and git remote origins.
+
+---
+
+### 19.3 In-Flight Secret Filtering & Egress Redaction Proxy
+
+To ensure private credentials never leak into web SSE streams, logs, or git commits, Agent HQ implements an in-memory streaming redaction filter across all adapter output pipes:
+
+```javascript
+// Redaction Engine: agents-ui & adapter stream filter
+const SECRET_PATTERNS = [
+  /(?:sk-[a-zA-Z0-9_-]{20,})/g,                 // OpenAI keys
+  /(?:ghp_[a-zA-Z0-9]{36})/g,                   // GitHub Personal Access Tokens
+  /(?:AIza[0-9A-Za-z\\-_]{35})/g,               // Google API keys
+  /(?:AKIA[0-9A-Z]{16})/g,                      // AWS Access Key ID
+  /(?:[a-zA-Z0-9+/]{40}=*)/g,                   // Generic Base64 256-bit secrets
+  /(?:bearer\s+[a-zA-Z0-9_\-\.]{20,})/gi        // Bearer tokens
+];
+
+function sanitizeStream(chunk) {
+  let clean = chunk;
+  for (const regex of SECRET_PATTERNS) {
+    clean = clean.replace(regex, '[REDACTED_SECRET]');
+  }
+  return clean;
+}
+```
+
+* **Git Pre-Commit Hook Guard:** Agent HQ automatically validates that no secret patterns exist in staged diffs before executing `git commit`.
+
+---
+
+## 20. Research Trajectory Checkpoint (05:10 PT)
+
+Wave 11 establishes bulletproof security and sandboxing principles for Agent HQ:
+- Dual-zone execution guarantees that speed is not sacrificed for security.
+- Host credentials remain strictly partitioned from agent runtimes.
+- In-flight secret sanitization guarantees zero credential leakages to public repositories or browser streams.
