@@ -719,3 +719,90 @@ Wave 11 establishes bulletproof security and sandboxing principles for Agent HQ:
 - Dual-zone execution guarantees that speed is not sacrificed for security.
 - Host credentials remain strictly partitioned from agent runtimes.
 - In-flight secret sanitization guarantees zero credential leakages to public repositories or browser streams.
+
+
+---
+
+## 21. Wave 12: Cognitive Memory Architecture & Cross-Session Graph Synthesis (The Knowledge Fabric)
+
+* **Timestamp:** 2026-11-21 05:50 PT (Iteration 10)
+* **Focus:** Solving agent amnesia and context rot through a durable, local, git-native two-tier memory architecture and background sleep-time consolidation.
+
+### 21.1 The Agent Amnesia Dilemma
+
+Today's autonomous coding agents suffer from acute amnesia:
+* Every session begins tabula rasa. An agent spends the first 5–10 turns re-discovering the test command, re-reading directory structures, or re-introducing bugs previously resolved in earlier sessions.
+* **The Naive Failure Mode:** Dumping past transcripts into system prompts consumes tens of thousands of tokens, introduces high latency, and triggers the *Lost in the Middle* phenomenon where attention mechanisms miss critical constraints.
+
+---
+
+### 21.2 The Two-Tier "Knowledge Fabric" Architecture
+
+Agent HQ 2.0 implements a decoupled, local-first memory model:
+
+```text
+ ┌────────────────────────────────────────────────────────┐
+ │                   WORKING MEMORY                       │
+ │  (Ephemeral, Real-Time SQLite: .state/coordination.db) │
+ ├────────────────────────────────────────────────────────┤
+ │ • Active file leases & AST symbol reservations         │
+ │ • Current turn step index & tool call outputs          │
+ │ • Live worktree branch diffs                           │
+ └───────────────────────────┬────────────────────────────┘
+                             │
+            Sleep-Time Distillation & Consolidation
+                             │
+                             ▼
+ ┌────────────────────────────────────────────────────────┐
+ │              EPISODIC & SEMANTIC FABRIC                │
+ │        (Durable, Local, Git-Tracked: .hq/knowledge/)   │
+ ├────────────────────────────────────────────────────────┤
+ │ • Architecture Graph (`graph.jsonl` entity triples)    │
+ │ • Automated Decision Records (`decisions.md`)          │
+ │ • Known Hazards & Antipatterns (`gotchas.md`)          │
+ └────────────────────────────────────────────────────────┘
+```
+
+#### A. Durable Schema Specifications:
+1. **Architecture Entity Triples (`.hq/knowledge/graph.jsonl`):**
+   ```json
+   {"subject": "AuthModule", "predicate": "DEPENDS_ON", "object": "RedisTokenStore", "sourceSession": "b1daf2ee", "confidence": 0.98}
+   {"subject": "Migration04", "predicate": "SUPERSEDES", "object": "LegacyUserSchema", "sourceSession": "1c7bd7cf", "confidence": 1.0}
+   ```
+2. **Automated Architectural Decision Records (`.hq/knowledge/decisions.md`):**
+   * Automatically generated whenever the developer approves a Level-1 merge:
+   ```markdown
+   ### ADR-2026-11-21: SQLite WAL Mode for Multi-Agent Coordination
+   * **Context:** High concurrency file-lease contention across 3 parallel agents.
+   * **Decision:** Replaced JSON file locks with SQLite in WAL mode (`coordination.db`).
+   * **Consequence:** Lock acquisition latency reduced from 420ms to 2.1ms; eliminated `.git/index.lock` collisions.
+   ```
+3. **Repository Hazards & Antipatterns (`.hq/knowledge/gotchas.md`):**
+   * High-signal lessons learned from failed test iterations:
+   ```markdown
+   * **Windows Path Escaping:** Always normalize backslashes to forward slashes before passing paths to tree-sitter or git subprocesses.
+   * **Test Environment:** Integration tests require `PORT=4040` environment variable or default to mock socket.
+   ```
+
+---
+
+### 21.3 Background "Sleep-Time" Consolidation Daemon
+
+Inspired by mammalian neurobiological memory consolidation (and the Letta memory lifecycle):
+* When all agent sessions in `agent-dashboard.js` remain idle for $> 15\text{ minutes}$, the **Sleep Consolidation Worker** awakens.
+* **Distillation Algorithm:**
+  1. Reads uncompacted turn logs from the day's completed sessions.
+  2. Extracts resolved test errors, modified dependency graphs, and merged PR diffs.
+  3. Deduplicates findings against existing `.hq/knowledge/` files.
+  4. Commits consolidated knowledge directly to the repository:
+     `git commit -m "chore(knowledge): consolidate agent episodic memory [skip ci]"`
+* **Zero Context Window Bloat:** Future sessions inject only the top 3 relevant entries from `gotchas.md` and `decisions.md` matching the user's specific prompt tokens, maintaining lean $< 2,000$ token context footprints.
+
+---
+
+## 22. Research Trajectory Checkpoint (06:00 PT)
+
+Wave 12 equips Agent HQ with long-term compound intelligence:
+- Agents retain hard-won architectural insights across days and weeks.
+- Repository-specific conventions are preserved automatically without manual prompting.
+- The two-tier memory model keeps context windows pristine while guaranteeing cross-session continuity.
