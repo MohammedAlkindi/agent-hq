@@ -149,14 +149,38 @@ As multi-agent coding moves from isolated toy tasks to simultaneous branches on 
 
 ---
 
-## 8. Summary & Overnight Research Checkpoint (Iteration 1)
+## 8. Wave 4 Deep Dive: Local Sandboxing, MicroVMs, & Airlock Execution
 
-* **Screened:** 48 competitive repositories, academic papers (MAST, AgenticFlict, Merge-Bench, ControlValve), and architectural frameworks.
-* **Analyzed in Depth:** 22 primary tools across visual dashboards, CLI multiplexers, and multi-agent harnesses.
-* **Key Conclusion:** The winning architecture for AI coding agents is **Supervised Local-First Orchestration**:
+### The Execution Danger in Autonomous Coding
+As coding agents gain shell and compilation privileges, the threat model shifts from "bad code generation" to **untrusted code execution**:
+* **Host Contamination:** Running package installs (`npm install`, `pip install`, `cargo build`) allows malicious build scripts (`postinstall`, `build.rs`) to inspect the host environment.
+* **Credential Scraping:** In raw host executions, an agent running shell tools can read `~/.ssh/`, `~/.aws/credentials`, or local environment variables.
+* **Why Static Allow-Lists Fail:** Attackers and complex build scripts easily bypass simple command allowlists via subshells, environment variable indirection (`$CMD`), and eval constructs.
+
+### The Sandboxing Spectrum for Local Orchestrators
+1. **MicroVMs (`libkrun`, Firecracker, `0xthierry/microvm`):**
+   * Delivers true hardware-level KVM virtualization with sub-200ms cold boot times.
+   * Completely walls off the host kernel.
+2. **Containerized Airlocks (`Docker` / `code-airlock` / `runc`):**
+   * Uses disposable local containers mounted strictly to the agent's worktree (`~/worktrees/<sid>`).
+   * Strips all host credentials, network ports, and environment variables.
+
+### Strategic Architecture for Agent HQ
+* **Tiered Isolation Modes in Agent HQ:**
+  * **Native Mode (Default):** Direct execution inside an isolated `git worktree` (`~/worktrees/<sid>`). Ideal for trusted local personal projects with zero startup overhead.
+  * **Airlock Mode (Untrusted / External Repos):** Spawns the agent process inside a disposable local container where only the specific worktree is mounted as `/workspace`. The host filesystem and SSH/AWS keys remain completely invisible.
+
+---
+
+## 9. Summary & Overnight Research Checkpoint (Iteration 2)
+
+* **Screened:** 62 competitive repositories, security benchmarks (AgentBound, AgenticFlict, MAST), and microVM frameworks.
+* **Analyzed in Depth:** 28 primary tools across visual dashboards, session multiplexers, AST merge drivers, and local sandboxes.
+* **Key Architecture Blueprint for Agent HQ:**
   1. **Spatial Visual Presence:** Ambient HCI preventing notification blindness.
-  2. **Git Worktree Isolation:** Collision-free disk environments per worker.
+  2. **Git Worktree & Airlock Isolation:** Collision-free, credential-safe execution per worker.
   3. **Risk-Calibrated Level-1 Triage:** Eliminating the 93% rubber-stamping approval fatigue.
-  4. **Pre-Code Symbol Coordination & Semantic Verification:** Preventing cross-agent merge breakage.
+  4. **Pre-Code Symbol Coordination:** Preventing cross-agent merge conflicts before they happen.
+
 
 
