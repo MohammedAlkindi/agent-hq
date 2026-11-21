@@ -129,9 +129,34 @@ Recent empirical studies on human-in-the-loop (HITL) software engineering agents
 
 ---
 
-## 7. Summary & Research Ledger Checkpoint
+## 7. Wave 3 Deep Dive: Multi-Agent Merge Conflicts, AST Semantics, & The AgenticFlict Benchmark
 
-* **Screened:** 36 competitive repositories, academic papers, and architectural frameworks.
-* **Analyzed in Depth:** 17 primary tools across visual dashboards, CLI multiplexers, and multi-agent harnesses.
-* **Key Conclusion:** The winning architecture for AI coding agents is **not** unconstrained autonomous swarms (which suffer from cascade failures and approval fatigue), but **Supervised Local-First Orchestration**: spatial visual awareness, git worktree isolation, and single-keystroke risk-calibrated triage.
+### The Emerging Science of Agent Collisions
+As multi-agent coding moves from isolated toy tasks to simultaneous branches on real codebases, traditional line-based Git merging fails:
+* **The `AgenticFlict` Benchmark (arXiv:2604.03551):** Evaluated hundreds of thousands of AI coding agent PRs on GitHub. Key findings:
+  1. Over **84% of cross-agent conflicts** occur in core source logic (not config or dependency manifests).
+  2. Structural collision patterns: agents frequently create complex `modify/delete` and `add/add` conflicts that standard 3-way text merge (`git merge-recursive`) cannot reconcile.
+* **The Silent Semantic Crash:** Two agents can merge without a single line-level Git conflict, yet completely break the build (e.g. Agent A modifies a method signature in `api.ts`, while Agent B introduces a new call site using the old signature in `client.ts`).
+
+### State-of-the-Art Solutions & Architecture for Agent HQ
+1. **Pre-Code Intent Coordination (`Foremerge` Pattern):**
+   * Rather than waiting for PR collisions, agents broadcast their **target files, symbols, and API claims** to a lightweight shared local SQLite store before beginning edits.
+   * Agent HQ can display visual "Collision Warnings" on desks when two characters intend to touch overlapping dependency trees.
+2. **Entity-Level / Tree-sitter Merging (`weave` Pattern):**
+   * Replace line-based git conflict markers with AST-level entity merging (functions and classes as atomic nodes), eliminating false line conflicts.
+3. **Automated Pre-Merge Semantic Check:**
+   * Before Agent HQ executes a worktree merge into `main`, it runs an isolated semantic check (type-checker + test suite dry-run) and visually flags broken cross-file contracts in the Diff modal.
+
+---
+
+## 8. Summary & Overnight Research Checkpoint (Iteration 1)
+
+* **Screened:** 48 competitive repositories, academic papers (MAST, AgenticFlict, Merge-Bench, ControlValve), and architectural frameworks.
+* **Analyzed in Depth:** 22 primary tools across visual dashboards, CLI multiplexers, and multi-agent harnesses.
+* **Key Conclusion:** The winning architecture for AI coding agents is **Supervised Local-First Orchestration**:
+  1. **Spatial Visual Presence:** Ambient HCI preventing notification blindness.
+  2. **Git Worktree Isolation:** Collision-free disk environments per worker.
+  3. **Risk-Calibrated Level-1 Triage:** Eliminating the 93% rubber-stamping approval fatigue.
+  4. **Pre-Code Symbol Coordination & Semantic Verification:** Preventing cross-agent merge breakage.
+
 
