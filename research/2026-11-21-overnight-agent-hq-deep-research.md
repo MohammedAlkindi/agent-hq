@@ -277,3 +277,174 @@ Synthesizing all research streams produces the complete architectural specificat
 
 
 
+
+
+---
+
+## 13. Wave 8: Implementation Engineering Blueprint & Phased Execution Roadmap
+
+* **Timestamp:** 2026-11-21 03:50 PT
+* **Focus:** Detailed low-level engineering specifications for Agent HQ 2.0 implementation—converting high-level findings into concrete schemas, algorithms, protocols, and phased sprint deliverables.
+
+### 13.1 Pre-Code Intent Coordination Engine (`.state/coordination.db`)
+
+To prevent multi-agent collisions *before* code is synthesized (as established in Wave 4 via *AgenticFlict* benchmarks), Agent HQ 2.0 replaces reactive git conflict resolution with an active intent lease engine.
+
+#### A. SQLite Coordination Schema
+
+```sql
+-- SQLite Schema: .state/coordination.db (WAL Mode Enabled)
+PRAGMA journal_mode = WAL;
+PRAGMA busy_timeout = 5000;
+
+-- Registered agent processes
+CREATE TABLE IF NOT EXISTS agent_sessions (
+    session_id TEXT PRIMARY KEY,
+    harness TEXT NOT NULL CHECK(harness IN ('antigravity', 'claude', 'codex', 'generic')),
+    worktree_path TEXT NOT NULL,
+    branch_name TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('idle', 'thinking', 'coding', 'awaiting_approval', 'dead')),
+    heartbeat_at INTEGER NOT NULL, -- Unix epoch millisecond timestamp
+    created_at INTEGER NOT NULL
+);
+
+-- File-level exclusive/shared lock leases
+CREATE TABLE IF NOT EXISTS file_leases (
+    lease_id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES agent_sessions(session_id) ON DELETE CASCADE,
+    file_path TEXT NOT NULL,       -- Normalized repo-relative path (e.g., 'src/api/router.ts')
+    lease_type TEXT NOT NULL CHECK(lease_type IN ('exclusive_write', 'shared_read')),
+    acquired_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,   -- TTL: heartbeat + 60,000ms
+    UNIQUE(file_path, lease_type)
+);
+
+-- AST symbol-level intent claims (fine-grained semantic reservations)
+CREATE TABLE IF NOT EXISTS symbol_claims (
+    claim_id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES agent_sessions(session_id) ON DELETE CASCADE,
+    file_path TEXT NOT NULL,
+    symbol_name TEXT NOT NULL,     -- e.g., 'handleDispatch', 'UserRouter'
+    symbol_type TEXT NOT NULL,     -- 'function', 'class', 'interface', 'variable'
+    intent_summary TEXT,           -- e.g., 'Adding retry parameter and backoff logic'
+    claimed_at INTEGER NOT NULL
+);
+
+-- Active intent broadcasts visible across all agents
+CREATE TABLE IF NOT EXISTS intent_broadcasts (
+    broadcast_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL REFERENCES agent_sessions(session_id) ON DELETE CASCADE,
+    message TEXT NOT NULL,
+    affected_files TEXT NOT NULL,  -- JSON array of file paths
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_file_leases_lookup ON file_leases(file_path, expires_at);
+CREATE INDEX IF NOT EXISTS idx_symbol_claims_lookup ON symbol_claims(file_path, symbol_name);
+```
+
+#### B. Lease Lifecycle & Conflict Detection Logic
+
+1. **Atomic Lease Acquisition (`acquireLease`):**
+   * Before modifying a target file, the agent harness queries `file_leases`:
+   ```sql
+   SELECT session_id, lease_type, expires_at 
+   FROM file_leases 
+   WHERE file_path = ? AND expires_at > ?;
+   ```
+   * If an active conflicting lease exists belonging to another live session, acquisition fails immediately with a `RESOURCE_CONTENTION` payload naming the blocking agent, its current branch, and its declared intent.
+   * If no contention exists, the lease is inserted with a default 60-second TTL.
+2. **Heartbeat Protocol (`renewLeases`):**
+   * The agent's background worker sends a ping every 15 seconds updating `heartbeat_at` in `agent_sessions` and bumping `expires_at` in `file_leases`.
+3. **Dead-Session Reaping (`reapStaleLeases`):**
+   * On every query, expired leases (`expires_at < current_timestamp`) are purged automatically. If an agent process crashes or is killed, its locks release within ≤ 60 seconds without manual administrator intervention.
+
+---
+
+### 13.2 Semantic AST Merge Driver & Conflict Mitigation Pipeline
+
+Standard line-based merge engines (`diff3`, `git-merge-file`) fail on LLM-generated code because LLMs frequently reorganize import blocks, reorder sibling functions, or modify adjacent formatting.
+
+#### A. 4-Stage AST Merge Architecture
+
+```text
+ ┌────────────────────────────────────────────────────────┐
+ │           STAGE 1: Syntax Tree Pre-Flight              │
+ │ Parse local worktree code + target branch with Tree-sitter│
+ └───────────────────────────┬────────────────────────────┘
+                             ▼
+ ┌────────────────────────────────────────────────────────┐
+ │           STAGE 2: Subtree Reconciliation              │
+ │ Match functions/classes by symbol signature; isolate    │
+ │ non-overlapping AST node additions automatically       │
+ └───────────────────────────┬────────────────────────────┘
+                             ▼
+ ┌────────────────────────────────────────────────────────┐
+ │           STAGE 3: Speculative Typecheck Dry-Run       │
+ │ Run in isolated worktree: `tsc --noEmit` or `node -c`  │
+ └───────────────────────────┬────────────────────────────┘
+                             ▼
+ ┌────────────────────────────────────────────────────────┐
+ │           STAGE 4: Atomic Fast-Forward / Merge         │
+ │ Land cleanly on main branch; trigger sound fanfare & UI│
+ └────────────────────────────────────────────────────────┘
+```
+
+#### B. Implementation Details
+* **Tree-Sitter Grammar Integration:** Using `web-tree-sitter` (Wasm-compiled) to avoid native build dependencies on Windows. Supports TypeScript, JavaScript, Python, and Rust out of the box.
+* **Non-Overlapping Sibling Insertion:** When Agent A appends `export function validateAuth()` and Agent B appends `export function parseConfig()`, the AST driver recognizes that both are root-level statement declarations under `program` and preserves both without generating a merge conflict marker (`<<<<<<< HEAD`).
+* **Speculative Test Gate:** If AST merge succeeds syntactically, Agent HQ executes the configured project test runner in the ephemeral worktree (`npm test -- --bail` or `pytest -x`). Only branches that pass syntax + typecheck + unit tests are presented in the 1-Click Level-1 Dispatcher tray.
+
+---
+
+### 13.3 High-Performance Bidirectional Web PTY Architecture
+
+Static log polling (reading tail logs over HTTP GET) introduces 500–1500ms latencies and fails to handle interactive CLI prompts (e.g., `(y/n)` confirmations or password masks).
+
+#### A. WebSocket Streaming Protocol Specification
+
+* **Transport:** `ws://127.0.0.1:4040/ws/pty/:sessionId`
+* **Local Security Boundary:**
+  - Binds strictly to IPv4 loopback (`127.0.0.1`).
+  - Connection requires an ephemeral authorization token passed in query parameters: `ws://127.0.0.1:4040/ws/pty/:sessionId?token=<auth_token>`. Tokens are generated in-memory upon agent startup and valid only for that process lifetime.
+* **Binary Framing vs Text Framing:**
+  - UTF-8 text framing for terminal streaming output.
+  - JSON framing for control messages:
+    ```json
+    // Client -> Server: Terminal Resize
+    { "type": "resize", "cols": 120, "rows": 32 }
+
+    // Client -> Server: Keystroke Forwarding
+    { "type": "input", "data": "\u0003" } // Sends Ctrl+C
+
+    // Server -> Client: Process Lifecycle Events
+    { "type": "exit", "code": 0, "durationMs": 4210 }
+    ```
+* **Frontend Rendering:**
+  - Integrated via `@xterm/xterm` with `@xterm/addon-fit` and `@xterm/addon-webgl` for 60fps hardware-accelerated terminal emulation.
+  - Collapsible retro-futuristic CRT drawer sliding up from the bottom of `world.html`.
+
+---
+
+### 13.4 Four-Phase Tactical Implementation Roadmap
+
+| Phase | Duration | Core Deliverables | Verification Milestone |
+|---|---|---|---|
+| **Phase 1: Coordination Layer & Heartbeat Leases** | Sprint 1 (Weeks 1–2) | • SQLite schema setup (`.state/coordination.db`)<br>• Lock acquisition & heartbeat daemon<br>• Pre-flight lease checks in adapters | 2 agents writing to separate files succeed in parallel; second agent attempting conflicting write receives non-blocking lease wait. |
+| **Phase 2: AST Conflict Engine & Worktree Automation** | Sprint 2 (Weeks 3–4) | • `web-tree-sitter` integration<br>• AST merge driver for TS/JS/Python<br>• Speculative test runner in isolated worktrees | Simultaneous edits to independent functions within the same file merge cleanly without git conflict markers. |
+| **Phase 3: Spatial UX & Bidirectional Terminal Drawer** | Sprint 3 (Weeks 5–6) | • WebSocket PTY streaming (`/ws/pty`)<br>• Collapsible CRT xterm drawer in `world.html`<br>• Level-1 1-click triage keyboard shortcuts (`Ctrl+Enter`) | User interacts directly with running agent shell from the visual office; approvals take < 2 seconds per event. |
+| **Phase 4: Token Governor, Circuit Breakers & Public Distribution** | Sprint 4 (Weeks 7–8) | • Real-time dollar-per-hour desk meters<br>• 12-turn loop circuit breaker<br>• Clean npm package packaging (`npx agent-hq`) | Clean installation on Windows/macOS/Linux via `npx agent-hq`; zero config setup with automatic adapter discovery. |
+
+---
+
+## 14. Overnight Research Checkpoint & Final Synthesis (04:00 PT)
+
+With the completion of Wave 8, the overnight research study for **Agent HQ** has successfully transitioned from market landscape analysis and academic theory into an executable, production-grade engineering architecture.
+
+* **Total Systems Screened:** 105+ open-source and commercial agent platforms.
+* **Total Academic Benchmarks Ingested:** MAST (approval fatigue), AgenticFlict (multi-agent code collisions), CodeNib (context boundary optimization), Letta (memory consolidation), Merge-Bench (semantic AST synthesis).
+* **Definitive Architectural Moats for Agent HQ:**
+  1. *Visual & Spatial Presence:* Translating abstract agent processes into an ambient, glanceable 2D pixel-art office that eliminates dashboard fatigue.
+  2. *Proactive Pre-Code Intent Locking:* Solving git contention before code generation begins via SQLite WAL leases.
+  3. *Level-1 Risk-Calibrated Triage:* Pre-drafting policy-compliant approvals to defeat the 93% human rubber-stamping failure mode.
+  4. *Multi-Runtime Normalization:* Flawlessly unifying Antigravity, Claude Code, and OpenAI Codex under a single pane of glass.
