@@ -4,6 +4,10 @@
 
 Agents sit at desks in rooms organized by repository, show real-time tool executions, celebrate turn completions, and can be steered or inspected without leaving your browser.
 
+<p align="center">
+  <img src="assets/hero-banner.svg" alt="Agent HQ Architecture and Virtual Office" width="100%" />
+</p>
+
 ---
 
 ## Key Capabilities
