@@ -198,16 +198,42 @@ In multi-turn coding agent trajectories, failure occurs long before reaching 1M+
 
 ---
 
-## 10. Summary & Overnight Research Checkpoint (Iteration 3)
+## 10. Wave 6 Deep Dive: Financial Governance, Token Telemetry, & Circuit Breakers
 
-* **Screened:** 78 competitive repositories, academic papers (CodeNib, Letta, AgentBound, AgenticFlict, MAST), and memory frameworks.
-* **Analyzed in Depth:** 34 primary tools across visual dashboards, session multiplexers, AST merge drivers, local sandboxes, and agent memory architectures.
+### The Economics of Multi-Agent Coding
+Long-horizon multi-agent tasks exhibit unique economic failure modes:
+* **The Non-Linear Accuracy vs. Spend Curve:** Academic benchmarks (*How Do Coding Agents Spend Your Money?*, 2026) prove that agent accuracy peaks at an intermediate cost threshold. Trajectories that exceed this point represent agents trapped in recursive compilation or grep loops, resulting in zero accuracy gains alongside exponential token burn.
+* **Input-Dominated Costs:** In multi-turn coding sessions, input tokens (driven by re-reading massive repositories, dependency trees, and verbose error stacks) account for **75–85% of total spend**.
+* **Self-Budgeting Failure:** Frontier LLMs systematically fail to accurately predict or pace their own token consumption; hard external circuit breakers are required.
+
+### Emerging FinOps Tools for Coding Agents
+1. **Runtime Circuit Breakers (`@monetisebg/circuit-breaker`, `budget-guard`):**
+   * Wrappers around SDK calls that intercept requests in-flight and throw fatal errors the moment aggregate costs exceed project budgets.
+2. **Loop Detection & Turn-Burst Brakes (`agent-budget-py`):**
+   * Halts execution if an agent triggers $\ge 12$ tool calls in a single turn without producing a file edit or passing test assertion.
+3. **Model Cascades & Dynamic Tiering:**
+   * Routing exploratory tasks (searching, lint checks, test runs) to ultra-fast, cheap models (Gemini Flash, Haiku) before escalating architecture decisions to frontier models (Opus, Gemini Pro).
+
+### Implementation Architecture for Agent HQ
+* **Active Spend Governor in Agent HQ:**
+  * **Global Daily Ceiling:** Real-time pause switch when multi-agent spend crosses a configurable threshold.
+  * **Visual Desk Burn Rate:** Displaying real-time dollar-per-hour and token velocity bars directly on character desks.
+  * **Loop Circuit Breaker:** Automatically flag and pause an agent if it enters repetitive tool retry loops, triggering an amber warning in the "Needs You" tray with options to `[Kill]`, `[Nudge]`, or `[Switch Model]`.
+
+---
+
+## 11. Summary & Overnight Research Checkpoint (Iteration 4)
+
+* **Screened:** 94 competitive repositories, academic papers (CodeNib, Letta, AgentBound, AgenticFlict, MAST, Token-Consumption Benchmarks), and FinOps frameworks.
+* **Analyzed in Depth:** 41 primary tools across visual dashboards, session multiplexers, AST merge drivers, local sandboxes, memory architectures, and spend governors.
 * **Key Architecture Blueprint for Agent HQ:**
   1. **Spatial Visual Presence:** Ambient HCI preventing notification blindness.
   2. **Git Worktree & Airlock Isolation:** Collision-free, credential-safe execution per worker.
   3. **Risk-Calibrated Level-1 Triage:** Eliminating the 93% rubber-stamping approval fatigue.
   4. **Pre-Code Symbol Coordination:** Preventing cross-agent merge conflicts before they happen.
   5. **Context Health & Memory Observability:** Visualizing context rot and code note staleness in real time.
+  6. **Active Financial Governance & Circuit Breakers:** Stopping runaway loops and budgeting multi-agent spend.
+
 
 
 
