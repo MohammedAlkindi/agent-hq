@@ -806,3 +806,98 @@ Wave 12 equips Agent HQ with long-term compound intelligence:
 - Agents retain hard-won architectural insights across days and weeks.
 - Repository-specific conventions are preserved automatically without manual prompting.
 - The two-tier memory model keeps context windows pristine while guaranteeing cross-session continuity.
+
+
+---
+
+## 23. Wave 13: Open-Source Distribution, CLI Packaging & Extensibility Plugin Ecosystem
+
+* **Timestamp:** 2026-11-21 06:05 PT (Iteration 11)
+* **Focus:** Seamless zero-config developer onboarding (`npx agent-hq`), the Open Harness Plugin Specification, and headless CI/CD remote approval webhooks.
+
+### 23.1 Zero-Config Onboarding (`npx agent-hq`)
+
+To achieve widespread open-source adoption, developer onboarding must require zero manual configuration files, environment variables, or complex daemons:
+
+```bash
+# Instant launch via npx:
+npx agent-hq
+
+# Or install globally:
+npm install -g agent-hq
+agent-hq --open
+```
+
+#### The Zero-Config Startup Lifecycle:
+1. **Dynamic Port Negotiation:** Attempts to bind to default port `4040`. If occupied, automatically increments to `4041`, `4042`, etc., without throwing an unhandled `EADDRINUSE` exception.
+2. **Automated Harness Auto-Discovery:**
+   * Scans default OS paths to detect installed coding runtimes:
+     - `~/.claude/` $\to$ Activates `ClaudeAdapter`.
+     - `C:/Users/.../AppData/Roaming/antigravity` or Linux/macOS equivalent $\to$ Activates `AntigravityAdapter`.
+     - `~/.codex/` or `codex` on system `$PATH` $\to$ Activates `CodexAdapter`.
+3. **Instant Browser Launch:** Opens `http://localhost:4040` directly to `world.html`, rendering active agents with zero manual pairing steps.
+
+---
+
+### 23.2 The Open Harness Plugin Specification (`hq-plugin.json`)
+
+To enable community contributors to add adapters for new or proprietary agent harnesses (e.g., Cline, Roo Code, Aider, Cursor Agent, Windsurf) without modifying Agent HQ core, Agent HQ 2.0 defines the **Open Harness Plugin Interface**:
+
+```typescript
+export interface IHarnessPlugin {
+  id: string;                      // e.g., 'cline', 'aider'
+  name: string;                    // e.g., 'Cline / Roo Code'
+  badgeColor: string;              // UI accent color
+  avatarIcon: string;              // SVG or pixel-art sprite asset
+  
+  // Required lifecycle hooks
+  discoverSessions(): Promise<AgentSessionSnapshot[]>;
+  readTurnState(sessionId: string): Promise<NormalizedTurnState>;
+  streamLogs(sessionId: string, onLine: (line: string) => void): () => void;
+  
+  // Optional interactive dispatch hooks
+  dispatchInput?(sessionId: string, input: string): Promise<boolean>;
+  terminateSession?(sessionId: string): Promise<boolean>;
+}
+```
+
+* **Plugin Discovery:** Agent HQ scans `~/.agent-hq/plugins/` and local node modules matching `agent-hq-plugin-*`.
+
+---
+
+### 23.3 Headless Mode & Remote Approval Webhooks
+
+For developers who manage long-running agent clusters while away from their desks:
+
+```text
+ ┌────────────────────────────────────────────────────────┐
+ │           AGENT HQ HEADLESS DAEMON (--headless)        │
+ └───────────────────────────┬────────────────────────────┘
+                             │
+                  Level-1 Triage Event
+                             │
+                             ▼
+ ┌────────────────────────────────────────────────────────┐
+ │                 WEBHOOK NOTIFIER                       │
+ ├────────────────────────────────────────────────────────┤
+ │ • Formats rich message with diff summary & test status │
+ │ • Signs action payload with local HMAC secret          │
+ │ • Posts to Discord / Slack / Telegram                  │
+ └───────────────────────────┬────────────────────────────┘
+                             │
+                             ▼
+         Mobile Device Notification (Slack/Discord)
+         "Antigravity-1 ready to merge branch `auth-fix`:
+          [⚡ 1-Click Approve]   [🔍 View Diff]   [❌ Reject]"
+```
+
+* **Cryptographic Security:** Remote approval links use HMAC-SHA256 signatures with 15-minute expirations, ensuring that unauthorized third parties cannot trigger remote git merges.
+
+---
+
+## 24. Research Trajectory Checkpoint (06:15 PT)
+
+Wave 13 rounds out the operational and ecosystem vision for Agent HQ:
+- Zero-config distribution guarantees viral open-source developer adoption.
+- The plugin specification opens Agent HQ to the entire modern ecosystem of AI coding runtimes.
+- Headless webhook integration transforms Agent HQ into a 24/7 autonomous engineering supervisor.
