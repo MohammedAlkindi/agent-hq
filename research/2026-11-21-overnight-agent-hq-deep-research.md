@@ -222,17 +222,56 @@ Long-horizon multi-agent tasks exhibit unique economic failure modes:
 
 ---
 
-## 11. Summary & Overnight Research Checkpoint (Iteration 4)
+## 11. Wave 7 Synthesis: The Agent HQ 2.0 System Architecture Specification
 
-* **Screened:** 94 competitive repositories, academic papers (CodeNib, Letta, AgentBound, AgenticFlict, MAST, Token-Consumption Benchmarks), and FinOps frameworks.
-* **Analyzed in Depth:** 41 primary tools across visual dashboards, session multiplexers, AST merge drivers, local sandboxes, memory architectures, and spend governors.
-* **Key Architecture Blueprint for Agent HQ:**
-  1. **Spatial Visual Presence:** Ambient HCI preventing notification blindness.
-  2. **Git Worktree & Airlock Isolation:** Collision-free, credential-safe execution per worker.
-  3. **Risk-Calibrated Level-1 Triage:** Eliminating the 93% rubber-stamping approval fatigue.
-  4. **Pre-Code Symbol Coordination:** Preventing cross-agent merge conflicts before they happen.
-  5. **Context Health & Memory Observability:** Visualizing context rot and code note staleness in real time.
-  6. **Active Financial Governance & Circuit Breakers:** Stopping runaway loops and budgeting multi-agent spend.
+Synthesizing all research streams produces the complete architectural specification for **Agent HQ 2.0**:
+
+```text
+ ┌─────────────────────────────────────────────────────────────────────────────┐
+ │                         AGENT HQ 2.0 ARCHITECTURE                           │
+ └──────────────────────────────────────┬──────────────────────────────────────┘
+                                        │
+    ┌───────────────────────────────────┼───────────────────────────────────┐
+    ▼                                   ▼                                   ▼
+┌───────────────────────┐   ┌───────────────────────┐   ┌───────────────────────┐
+│     SPATIAL HCI       │   │    EXECUTION ENGINE   │   │  COGNITIVE GOVERNANCE │
+├───────────────────────┤   ├───────────────────────┤   ├───────────────────────┤
+│ • Pixel Office Sim    │   │ • Multi-Harness Adapts│   │ • Level-1 HITL Triage │
+│ • 8-Bit Web Audio     │   │ • Git Worktree Engine │   │ • Context Rot Gauges  │
+│ • Inline Diff Modal   │   │ • Airlock Containers  │   │ • Pre-Code Intent DB  │
+│ • CRT Terminal Drawer │   │ • Task Shard Router   │   │ • Spend Circuit Break │
+└───────────────────────┘   └───────────────────────┘   └───────────────────────┘
+```
+
+### 1. The 6 Core Subsystems
+1. **Spatial Presence & Ambient HCI (`agents-ui/`):**
+   * Eliminates notification fatigue by mapping agent activities to character animations (pacing for thinking, typing sparks, floating zero-G for Antigravity, retro phosphor green CRT for Codex).
+   * Procedural 8-bit sound cues provide subconscious awareness of turn completion and pending questions without breaking flow state.
+2. **Universal Ingestion & Multi-Harness Adapters (`adapters/`):**
+   * Decoupled normalization layer standardizing session states, turn transitions, tool invocations, and token telemetry across **Google Antigravity**, **Claude Code**, and **OpenAI Codex**.
+3. **Collision-Free Execution & Worktree Engine (`worktrees.js`):**
+   * Automatically isolates parallel tasks into dedicated `git worktree` instances (`~/worktrees/<sid>`), completely preventing `.git/index.lock` collisions.
+   * Provides optional "Airlock" containerized isolation for untrusted repositories to protect host credentials.
+4. **Pre-Code Intent Coordination & Semantic Merging:**
+   * Uses a local SQLite store (`.state/coordination.db`) where agents broadcast target files and symbols *before* code generation.
+   * Tree-sitter AST-aware merge driver eliminates false line conflicts and performs pre-merge type/test dry runs.
+5. **Level-1 Risk-Calibrated Triage (`dispatcher.js` & `tray.js`):**
+   * Solves the 93% rubber-stamping dilemma by auto-executing safe, reversible actions (Level 0) while pre-drafting verified, policy-aligned replies for human approval via 1-click `[⚡ Accept & Send]` or `Ctrl+Enter` (Level 1).
+6. **Context Health & Financial Circuit Breaker (`governor.js`):**
+   * Real-time visual monitoring of context window bloat and note staleness.
+   * Enforces hard project budget caps and halts runaway loop trajectories exceeding 12 tool iterations without code progress.
+
+---
+
+## 12. Summary & Overnight Research Checkpoint (Iteration 5)
+
+* **Screened:** 105 competitive repositories, academic papers (CodeNib, Letta, AgentBound, AgenticFlict, Merge-Bench, MAST, Token-Consumption Benchmarks), and systems frameworks.
+* **Analyzed in Depth:** 46 primary tools across visual dashboards, session multiplexers, AST merge drivers, local sandboxes, memory architectures, and spend governors.
+* **Overnight Milestones Achieved:**
+  - Complete competitive landscape mapped across 12 primary systems.
+  - Empirical failure modes documented (approval fatigue, git lock contention, context rot, runaway loop costs).
+  - Concrete, defensible architectural blueprint established for Agent HQ 2.0.
+
 
 
 
