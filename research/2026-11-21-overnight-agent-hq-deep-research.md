@@ -172,15 +172,43 @@ As coding agents gain shell and compilation privileges, the threat model shifts 
 
 ---
 
-## 9. Summary & Overnight Research Checkpoint (Iteration 2)
+## 9. Wave 5 Deep Dive: Context Rot, Memory Consolidation, & The CodeNib Paradigm
 
-* **Screened:** 62 competitive repositories, security benchmarks (AgentBound, AgenticFlict, MAST), and microVM frameworks.
-* **Analyzed in Depth:** 28 primary tools across visual dashboards, session multiplexers, AST merge drivers, and local sandboxes.
+### The Limits of Raw Context Windows
+In multi-turn coding agent trajectories, failure occurs long before reaching 1M+ token context windows:
+* **Attention Rot:** Large-context LLMs suffer severe recall degradation when bloated with 50+ turns of tool output dumps, failed compiler traces, and verbose directory trees.
+* **Content Staleness & Semantic Drift:** Over multi-hour sessions, an agent retains outdated assumptions, superseded function signatures, or contradictory instructions.
+* **Redundant Exploration Loops:** Without bounded memory, agents waste 40–60% of their token budget re-reading the same files or searching with repetitive `grep` calls.
+
+### Architectural Innovations from Current Research
+1. **The CodeNib Paradigm (Data-Centric Context Bounding):**
+   * Pre-compiles lexical (BM25), vector, and structural (SCIP symbol graph) views behind a strict manifest and source-address contract.
+   * Hands agents precise, bounded candidates and retires them after first-read, cutting trajectory tokens by **50–87%** while outperforming on-demand exploration.
+2. **Letta / MemGPT (Multi-Tier Memory & Sleep-Time Consolidation):**
+   * Splits memory into working message buffers, core user/goal blocks, and archival storage.
+   * Runs asynchronous **sleep-time compute** while agents are idle to deduplicate facts, resolve contradictory instructions, and prune stale context before new sessions launch.
+3. **Repository-Anchored Memory (`MEMORY.md` & MCP Middleware):**
+   * Enforces a concise single source of truth (<300 lines) within the repository, allowing sessions to safely compact or restart with zero loss of intent.
+
+### Visualizing Memory in Agent HQ
+* **Desk Memory Gauges:** In Agent HQ's visual office, add a context health indicator above each character:
+  * *Context Pressure Meter:* Green (<40k tokens), Amber (40k–120k), Red (>120k tokens indicating imminent attention rot).
+  * *Note Staleness Indicator:* A small warning badge if an agent's memory anchors refer to lines or functions modified in recent commits.
+  * *One-Click Compact / Consolidate Action:* Trigger a background consolidation pass to clean up an agent's working context without terminating its task.
+
+---
+
+## 10. Summary & Overnight Research Checkpoint (Iteration 3)
+
+* **Screened:** 78 competitive repositories, academic papers (CodeNib, Letta, AgentBound, AgenticFlict, MAST), and memory frameworks.
+* **Analyzed in Depth:** 34 primary tools across visual dashboards, session multiplexers, AST merge drivers, local sandboxes, and agent memory architectures.
 * **Key Architecture Blueprint for Agent HQ:**
   1. **Spatial Visual Presence:** Ambient HCI preventing notification blindness.
   2. **Git Worktree & Airlock Isolation:** Collision-free, credential-safe execution per worker.
   3. **Risk-Calibrated Level-1 Triage:** Eliminating the 93% rubber-stamping approval fatigue.
   4. **Pre-Code Symbol Coordination:** Preventing cross-agent merge conflicts before they happen.
+  5. **Context Health & Memory Observability:** Visualizing context rot and code note staleness in real time.
+
 
 
 
