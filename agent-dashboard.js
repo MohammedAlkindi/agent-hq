@@ -1196,7 +1196,9 @@ function readBody(req, max) {
   });
 }
 
-function serve() {
+let broadcastLogLine = () => {};
+
+function serve(options = {}) {
   let lastHit = Date.now();
   // Control endpoints need the per-run token from the page and a same-origin request. A custom
   // header forces a CORS preflight that this server never answers, so no other site can post.
@@ -1207,13 +1209,67 @@ function serve() {
 
   dispatcher.start();
   const streams = new Set();
+  const sessionLogPositions = new Map();
+
+  broadcastLogLine = function(sid, line) {
+    if (!line || !streams.size) return;
+    const lineData = `event: log_line\ndata: ${JSON.stringify({ type: "log_line", sid, line })}\n\n`;
+    const chunkData = `event: term_chunk\ndata: ${JSON.stringify({ type: "term_chunk", sid, text: line + "\n" })}\n\n`;
+    for (const r of streams) {
+      if (r._filterSid && r._filterSid !== sid) continue;
+      try {
+        r.write(lineData);
+        r.write(chunkData);
+      } catch {
+        streams.delete(r);
+      }
+    }
+  };
+
+  function checkTranscriptUpdates() {
+    if (!streams.size) return;
+    const allStates = adapters.getAllStates();
+    for (const [id, st] of allStates) {
+      if (!st.file) continue;
+      try {
+        if (!fs.existsSync(st.file)) continue;
+        const stat = fs.statSync(st.file);
+        const curSize = stat.size;
+        const prevSize = sessionLogPositions.get(id);
+        if (prevSize === undefined) {
+          sessionLogPositions.set(id, curSize);
+          continue;
+        }
+        if (curSize > prevSize) {
+          const len = curSize - prevSize;
+          const fd = fs.openSync(st.file, "r");
+          const buf = Buffer.alloc(len);
+          fs.readSync(fd, buf, 0, len, prevSize);
+          fs.closeSync(fd);
+          sessionLogPositions.set(id, curSize);
+          const chunk = buf.toString("utf8");
+          const lines = chunk.split("\n").filter(Boolean);
+          for (const line of lines) {
+            broadcastLogLine(id, line);
+          }
+        } else if (curSize < prevSize) {
+          sessionLogPositions.set(id, curSize);
+        }
+      } catch {}
+    }
+  }
+
   let pushTimer = null, lastPush = 0;
   function push() {
     lastPush = Date.now();
     if (!streams.size) return;
+    checkTranscriptUpdates();
     let body;
     try { body = "event: state\ndata: " + JSON.stringify(snapshot()) + "\n\n"; } catch { return; }
-    for (const r of streams) { try { r.write(body); } catch { streams.delete(r); } }
+    for (const r of streams) {
+      if (r._filterSid) continue;
+      try { r.write(body); } catch { streams.delete(r); }
+    }
   }
   // At most one push per 600ms however many files change at once.
   function schedulePush(delay) {
@@ -1310,12 +1366,39 @@ function serve() {
 
     // Live updates: one server-sent-events stream per open page; a snapshot is pushed when a
     // transcript or board file changes (debounced) and every 4s for roster and clock changes.
-    if (u === "/api/stream") {
+    // Also supports streaming log_line and term_chunk for active sessions.
+    if (u === "/api/stream" || u === "/api/logs/stream") {
+      const q = new URLSearchParams((req.url || "").split("?")[1] || "");
+      const filterSid = String(q.get("sid") || "").trim();
       res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-store", connection: "keep-alive" });
       res.write("retry: 2000\n\n");
+      if (filterSid) res._filterSid = filterSid;
       streams.add(res);
       req.on("close", () => streams.delete(res));
-      try { res.write("event: state\ndata: " + JSON.stringify(snapshot()) + "\n\n"); } catch {}
+      if (u === "/api/stream" && !filterSid) {
+        try { res.write("event: state\ndata: " + JSON.stringify(snapshot()) + "\n\n"); } catch {}
+      }
+      if (filterSid) {
+        const allStates = adapters.getAllStates();
+        const st = allStates.get(filterSid) || [...allStates.values()].find((x) => x.id === filterSid);
+        if (st && st.file && fs.existsSync(st.file)) {
+          try {
+            const lines = fs.readFileSync(st.file, "utf8").split("\n").filter(Boolean).slice(-30);
+            for (const line of lines) {
+              res.write(`event: log_line\ndata: ${JSON.stringify({ type: "log_line", sid: filterSid, line })}\n\n`);
+              res.write(`event: term_chunk\ndata: ${JSON.stringify({ type: "term_chunk", sid: filterSid, text: line + "\n" })}\n\n`);
+            }
+          } catch {}
+        }
+      }
+      return;
+    }
+    if (u === "/api/stream/broadcast" || u === "/api/logs/emit") {
+      const q = new URLSearchParams((req.url || "").split("?")[1] || "");
+      const sid = String(q.get("sid") || "test-sid").trim();
+      const text = String(q.get("text") || "Live terminal log line").trim();
+      broadcastLogLine(sid, text);
+      json(res, 200, { ok: true, broadcast: true, sid, text });
       return;
     }
     if (u === "/api/diff") {
@@ -1394,37 +1477,84 @@ function serve() {
     res.writeHead(404); res.end();
   });
   srv.on("error", (e) => { console.error(e.code === "EADDRINUSE" ? `port ${PORT} is in use` : e.message); process.exit(1); });
-  srv.listen(PORT, "127.0.0.1", () => console.log(`agent dashboard on ${URL_}`));
+  srv.listen(PORT, "127.0.0.1", () => {
+    console.log(`agent dashboard on ${URL_}`);
+    if (options && options.open) launchBrowser();
+  });
   setInterval(() => { if (queue.length) drainQueue(); }, 5e3).unref();
   // Stay up while a message waits for its agent, even with the page closed.
   setInterval(() => {
     if (streams.size) lastHit = Date.now(); // an open page counts as watching
     if (Date.now() - lastHit > IDLE_EXIT && !queue.length) process.exit(0);
   }, 60e3).unref();
+  return srv;
 }
 
-async function open() {
-  if (!(await ping())) {
-    cp.spawn(process.execPath, [__filename], { detached: true, stdio: "ignore", windowsHide: true }).unref();
-    for (let i = 0; i < 25 && !(await ping()); i++) await new Promise((r) => setTimeout(r, 200));
-  }
+function launchBrowser() {
   const chrome = ["ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"]
     .map((v) => process.env[v] && path.join(process.env[v], "Google", "Chrome", "Application", "chrome.exe"))
     .find((p) => p && fs.existsSync(p));
   if (chrome) cp.spawn(chrome, [`--app=${URL_}`, "--window-size=1320,920"], { detached: true, stdio: "ignore" }).unref();
-  else cp.exec(`start "" "${URL_}"`);
+  else {
+    const cmd = process.platform === "win32" ? `start "" "${URL_}"` : process.platform === "darwin" ? `open "${URL_}"` : `xdg-open "${URL_}"`;
+    cp.exec(cmd);
+  }
+}
+
+async function open() {
+  if (!(await ping())) {
+    cp.spawn(process.execPath, [__filename, "--serve"], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+    for (let i = 0; i < 25 && !(await ping()); i++) await new Promise((r) => setTimeout(r, 200));
+  }
+  launchBrowser();
+}
+
+function printHelp() {
+  console.log(`Agent HQ - Visual control plane & animated office simulator for AI agents
+
+Usage:
+  npx agent-hq [options]
+  node agent-dashboard.js [options]
+
+Options:
+  --open        Start background server if needed and open dashboard in Chrome/browser
+  --serve       Run server in foreground without launching browser
+  --no-open     Do not automatically open browser on startup
+  --json        Print full system state snapshot (sessions, metrics, worktrees) and exit
+  --port <p>    Specify port (default: 7787, or AGENT_DASH_PORT env var)
+  -h, --help    Show this help message
+
+Endpoints:
+  /                  Visual Office Simulator (world.html)
+  /#perf             Agent Fleet Performance & Cost metrics
+  /details           Compact text card overview
+  /api/state         Real-time JSON state snapshot
+  /api/diff?sid=<id> Git diff & changed files for session
+  /api/worktrees     Git worktree isolation engine status
+  /api/logs?sid=<id> Live session log reader
+  /api/stream        Server-Sent Events real-time event & terminal stream
+  /api/logs/stream   Dedicated SSE terminal stream for active sessions
+`);
 }
 
 if (require.main === module) {
-  if (process.argv.includes("--json")) {
+  if (process.argv.includes("-h") || process.argv.includes("--help")) {
+    printHelp();
+    process.exit(0);
+  } else if (process.argv.includes("--json")) {
     winTasks.at = Date.now(); // skip the slow Task Scheduler query for a one-shot print
     console.log(JSON.stringify(snapshot(), null, 2));
     process.exit(0);
   } else if (process.argv.includes("--open")) {
     open();
+  } else if (process.argv.includes("--serve") || process.argv.includes("--no-open")) {
+    serve({ open: false });
   } else {
-    serve();
+    // Default invocation without arguments:
+    // Starts dashboard server and opens dashboard in browser (suppressed in automated test runners)
+    const shouldOpen = !process.env.AGENT_DASH_PORT && process.stdout.isTTY;
+    serve({ open: shouldOpen });
   }
 }
 
-module.exports = { snapshot, classify, perf };
+module.exports = { snapshot, classify, perf, serve, open, launchBrowser, printHelp, broadcastLogLine };

@@ -716,6 +716,19 @@ header{flex-wrap:wrap;row-gap:8px}
 .mini-diff-btn{font-size:11px!important;padding:1px 8px!important;margin-left:8px;border-color:var(--accent)!important;color:var(--accent)!important}
 .mini-diff-btn:hover{background:color-mix(in oklab,var(--accent) 15%,transparent)!important}
 
+/* Miniature retro phosphor gauges on agent desk */
+.desk-gauge{display:flex;flex-direction:column;gap:2px;width:92%;max-width:108px;margin:3px auto 0;padding:2px 5px;background:rgba(6,16,10,0.85);border:1px solid rgba(52,211,153,0.35);border-radius:4px;font-family:ui-monospace,"Cascadia Code","Segoe UI Mono",Menlo,Consolas,monospace;font-size:9px;line-height:1.2;box-shadow:0 0 8px rgba(16,185,129,0.25),inset 0 0 4px rgba(16,185,129,0.15);pointer-events:none;z-index:2;box-sizing:border-box}
+.gauge-burn{color:#34d399;font-weight:700;display:flex;justify-content:center;letter-spacing:-0.2px;text-shadow:0 0 5px rgba(52,211,153,0.65)}
+.gauge-context{display:flex;flex-direction:column;gap:1.5px}
+.gauge-context .ctx-label{display:flex;justify-content:center;color:#6ee7b7;font-size:8.5px;font-weight:600;letter-spacing:-0.2px;text-shadow:0 0 4px rgba(110,231,183,0.5)}
+.gauge-context .ctx-bar-track{width:100%;height:3.5px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;position:relative}
+.gauge-context .ctx-bar{height:100%;border-radius:2px;transition:width .3s ease,background-color .3s ease}
+.gauge-context.ctx-low .ctx-bar,.ctx-bar.ctx-low{background:#10b981;box-shadow:0 0 4px #10b981}
+.gauge-context.ctx-mid .ctx-bar,.ctx-bar.ctx-mid{background:#34d399;box-shadow:0 0 4px #34d399}
+.gauge-context.ctx-warn .ctx-bar,.ctx-bar.ctx-warn{background:#fbbf24;box-shadow:0 0 5px #fbbf24}
+.gauge-context.ctx-crit .ctx-bar,.ctx-bar.ctx-crit{background:#f43f5e;box-shadow:0 0 8px #f43f5e;animation:pulseCrit 1s infinite alternate}
+@keyframes pulseCrit{from{opacity:.6;box-shadow:0 0 4px #f43f5e}to{opacity:1;box-shadow:0 0 10px #f43f5e}}
+
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style></head>
 <body class="day">
@@ -1229,6 +1242,31 @@ function peekLines(s, now) {
   return out;
 }
 
+function renderDeskGauge(s, now) {
+  const m = s.metrics || {};
+  const cost = typeof m.cost === "number" ? m.cost : (typeof s.cost === "number" ? s.cost : 0);
+  const ageMs = s.born ? (now - s.born) : s.since ? (now - s.since) : (now - (s.lastActive || now));
+  const hrs = Math.max(ageMs / 3600000, 1 / 60);
+  const burnRate = typeof s.burnRate === "number" ? s.burnRate : (cost / hrs);
+  const burnText = `[$${(burnRate >= 10 ? burnRate.toFixed(1) : burnRate.toFixed(2))}/hr]`;
+
+  const ctxTokens = s.ctx || (s.context ? s.context.tokens : 0) || 0;
+  const maxCtx = s.maxCtx || 200000;
+  const pct = Math.min(Math.round((ctxTokens / maxCtx) * 100), 100);
+  const ctxText = `[${k(ctxTokens)} / ${k(maxCtx)}]`;
+  const ctxLvl = pct >= 90 ? "ctx-crit" : pct >= 75 ? "ctx-warn" : pct >= 50 ? "ctx-mid" : "ctx-low";
+
+  return h("div", { class: "desk-gauge" },
+    h("div", { class: "gauge-burn", text: burnText }),
+    h("div", { class: "gauge-context " + ctxLvl, title: `Context: ${ctxText} (${pct}%)` },
+      h("div", { class: "ctx-label", text: ctxText }),
+      h("div", { class: "ctx-bar-track" },
+        h("div", { class: "ctx-bar " + ctxLvl, style: { width: Math.max(pct, 4) + "%" } })
+      )
+    )
+  );
+}
+
 function agentEl(s, now, hue, park, conflicted) {
   const L = look(s);
   const mood = s.stuck ? "worry" : moodOf(s);
@@ -1261,6 +1299,22 @@ function agentEl(s, now, hue, park, conflicted) {
     pe.className = "prop " + pr;
     pe.innerHTML = pr ? `<svg viewBox="0 0 30 30">${PROP[pr]}</svg>` : "";
     pe.title = pr ? PROP_TIP[pr] : "";
+  }
+  let gauge = el.querySelector(".desk-gauge");
+  if (!park) {
+    const newGauge = renderDeskGauge(s, now);
+    if (gauge) {
+      gauge.replaceWith(newGauge);
+    } else {
+      const stage = el.querySelector(".stage");
+      if (stage && stage.nextSibling) {
+        el.insertBefore(newGauge, stage.nextSibling);
+      } else {
+        el.append(newGauge);
+      }
+    }
+  } else if (gauge) {
+    gauge.remove();
   }
   el.querySelector(".name").textContent = s.title;
   put(el.querySelector(".stat"), ...statusLine(s, now));
@@ -1689,12 +1743,79 @@ function renderDiffModalView(diff, mode) {
 }
 
 // ---------------------------------------------------------------- live terminal drawer
+let activeTermSid = null;
 let currentTermSid = null;
 let termAutoScroll = true;
 let termPollTimer = null;
 
+function appendTermLine(text, cls = "info") {
+  const body = $("#term-body");
+  if (!body) return;
+  const cursor = body.querySelector(".term-cursor");
+  if (cursor && cursor.parentNode) cursor.parentNode.remove();
+
+  const lineEl = h("div", { class: "term-line " + cls }, text);
+  body.append(lineEl);
+
+  const cmd = h("div", { class: "term-line cmd" }, `agent@agent-hq $ `, h("span", { class: "term-cursor" }));
+  body.append(cmd);
+
+  if (termAutoScroll) {
+    body.scrollTop = body.scrollHeight;
+  }
+}
+
+function appendTermChunk(chunk, cls = "info") {
+  const body = $("#term-body");
+  if (!body) return;
+  const cursor = body.querySelector(".term-cursor");
+  if (cursor && cursor.parentNode) cursor.parentNode.remove();
+
+  const text = String(chunk || "");
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    if (i === 0 && body.lastElementChild && !body.lastElementChild.classList.contains("cmd")) {
+      body.lastElementChild.textContent += l;
+    } else if (l.length > 0 || i < lines.length - 1) {
+      body.append(h("div", { class: "term-line " + cls }, l));
+    }
+  }
+
+  const cmd = h("div", { class: "term-line cmd" }, `agent@agent-hq $ `, h("span", { class: "term-cursor" }));
+  body.append(cmd);
+
+  if (termAutoScroll) {
+    body.scrollTop = body.scrollHeight;
+  }
+}
+
+function handleTermSSE(data) {
+  if (!data) return;
+  const sid = data.sid || data.id;
+  const curSid = activeTermSid || currentTermSid;
+  if (!sid || (curSid && sid !== curSid)) return;
+
+  if (data.type === "term_chunk" || data.chunk !== undefined) {
+    appendTermChunk(data.text !== undefined ? data.text : data.chunk, data.cls || "info");
+  } else if (data.type === "log_line" || data.line !== undefined) {
+    const lineVal = data.line !== undefined ? data.line : data.text;
+    const txt = typeof lineVal === "string" ? lineVal : (lineVal && lineVal.text) || JSON.stringify(lineVal);
+    let cls = data.cls || (lineVal && lineVal.cls);
+    if (!cls) {
+      cls = /\[FAIL|\[ERROR/i.test(txt) ? "err" : /\[TOOL|\[ACTIVE TOOL/i.test(txt) ? "tool" : /\[USER|\[PROMPT/i.test(txt) ? "prompt" : /\[AGENT/i.test(txt) ? "thought" : "info";
+    }
+    appendTermLine(txt, cls);
+  }
+}
+
 function openTerminalDrawer(sid) {
+  activeTermSid = sid;
   currentTermSid = sid;
+  if (typeof window !== "undefined") {
+    window.activeTermSid = sid;
+    window.currentTermSid = sid;
+  }
   const s = D && D.sessions.find((x) => x.id === sid);
   const drawer = $("#term-drawer"), title = $("#term-agent-title"), body = $("#term-body");
   if (!drawer || !body) return;
@@ -1703,17 +1824,22 @@ function openTerminalDrawer(sid) {
   renderTerminalLogs(s);
   if (termPollTimer) clearInterval(termPollTimer);
   termPollTimer = setInterval(() => {
-    if (drawer.hidden || currentTermSid !== sid) return;
+    if (drawer.hidden || (activeTermSid || currentTermSid) !== sid) return;
     const cur = D && D.sessions.find((x) => x.id === sid);
     if (cur) renderTerminalLogs(cur, true);
-  }, 2500);
+  }, 5000);
 }
 
 function closeTerminalDrawer() {
   const drawer = $("#term-drawer");
   if (drawer) drawer.hidden = true;
   if (termPollTimer) { clearInterval(termPollTimer); termPollTimer = null; }
+  activeTermSid = null;
   currentTermSid = null;
+  if (typeof window !== "undefined") {
+    window.activeTermSid = null;
+    window.currentTermSid = null;
+  }
 }
 
 function renderTerminalLogs(s) {
@@ -1993,14 +2119,39 @@ if (wc) wc.addEventListener("click", (e) => {
   setTimeout(() => p.remove(), 2200);
 });
 let LIVE = false, lastState = 0;
+let eventSource = null;
 function connect() {
   // ?nolive keeps the page on polling (screenshots, low-power use)
   if (!window.EventSource || new URLSearchParams(location.search).has("nolive")) return;
   const es = new EventSource("/api/stream");
+  eventSource = es;
+  if (typeof window !== "undefined") window.eventSource = es;
   es.addEventListener("state", (e) => {
     try { const d = JSON.parse(e.data); LIVE = true; lastState = Date.now(); render(d); fails = 0; $("#banner").hidden = true; } catch {}
   });
+  es.addEventListener("log_line", (e) => {
+    try { handleTermSSE(JSON.parse(e.data)); } catch {}
+  });
+  es.addEventListener("term_chunk", (e) => {
+    try { handleTermSSE(JSON.parse(e.data)); } catch {}
+  });
+  es.addEventListener("message", (e) => {
+    try {
+      const d = JSON.parse(e.data);
+      if (d.type === "log_line" || d.type === "term_chunk") handleTermSSE(d);
+    } catch {}
+  });
   es.onerror = () => { LIVE = false; $("#live").classList.remove("on"); };
+}
+if (typeof window !== "undefined") {
+  window.activeTermSid = activeTermSid;
+  window.currentTermSid = currentTermSid;
+  window.openTerminalDrawer = openTerminalDrawer;
+  window.closeTerminalDrawer = closeTerminalDrawer;
+  window.renderDeskGauge = renderDeskGauge;
+  window.handleTermSSE = handleTermSSE;
+  window.appendTermLine = appendTermLine;
+  window.appendTermChunk = appendTermChunk;
 }
 connect();
 tick();

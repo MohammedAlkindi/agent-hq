@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Local-first visual control plane and animated office simulator for AI coding agents",
   "main": "agent-dashboard.js",
+  "bin": {
+    "agent-hq": "agent-dashboard.js"
+  },
   "scripts": {
     "start": "node agent-dashboard.js --open",
     "test": "node run-tests.js"

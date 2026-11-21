@@ -355,9 +355,91 @@ async function main() {
     });
     assert(streamOk, 'GET /api/stream provides active text/event-stream SSE events');
 
+    // Test GET /api/logs/stream (Dedicated Session SSE Stream)
+    if (sampleSid) {
+      const logStreamOk = await new Promise((resolve) => {
+        const req = http.get(`http://127.0.0.1:${TEST_PORT}/api/logs/stream?sid=${encodeURIComponent(sampleSid)}`, (res) => {
+          const isEventStream = res.statusCode === 200 && (res.headers['content-type'] || '').includes('text/event-stream');
+          res.on('data', (chunk) => {
+            const str = chunk.toString();
+            if (str.includes('event:') || str.includes('retry:') || str.includes('data:')) {
+              req.destroy();
+              resolve(isEventStream);
+            }
+          });
+        });
+        req.on('error', () => resolve(false));
+        setTimeout(() => { req.destroy(); resolve(false); }, 4000);
+      });
+      assert(logStreamOk, 'GET /api/logs/stream provides dedicated text/event-stream SSE log feed');
+    }
+
   } finally {
     serverProc.kill('SIGKILL');
   }
+
+  // --- 8. One-Command Global CLI Validation ---
+  console.log('\n--- 8. One-Command Global CLI Validation ---');
+  const pkgJsonPath = path.join(ROOT, 'package.json');
+  assert(fs.existsSync(pkgJsonPath), 'package.json exists');
+  const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
+  assert(pkg.bin && pkg.bin['agent-hq'] === 'agent-dashboard.js', 'package.json defines "bin": { "agent-hq": "agent-dashboard.js" }');
+
+  const helpCheckLong = await runCommand('node', [AGENT_DASH, '--help']);
+  assert(helpCheckLong.code === 0, 'node agent-dashboard.js --help exits with code 0');
+  assert(helpCheckLong.stdout.includes('Agent HQ') && helpCheckLong.stdout.includes('agent-hq'), 'node --help outputs application usage and agent-hq command line');
+  assert(helpCheckLong.stdout.includes('--open') && helpCheckLong.stdout.includes('--json'), 'node --help documents flags (--open, --json, etc.)');
+
+  const helpCheckShort = await runCommand('node', [AGENT_DASH, '-h']);
+  assert(helpCheckShort.code === 0, 'node agent-dashboard.js -h exits with code 0');
+  assert(helpCheckShort.stdout === helpCheckLong.stdout, 'node -h matches --help output identically');
+
+  // --- 9. Desk-Level Spend & Token Velocity Phosphor Gauges ---
+  console.log('\n--- 9. Desk-Level Spend & Token Velocity Phosphor Gauges ---');
+  assert(htmlContent.includes('.desk-gauge'), 'world.html defines .desk-gauge container styling');
+  assert(htmlContent.includes('.gauge-burn'), 'world.html defines .gauge-burn styling');
+  assert(htmlContent.includes('.gauge-context'), 'world.html defines .gauge-context styling');
+  assert(htmlContent.includes('.ctx-bar-track') && htmlContent.includes('.ctx-bar'), 'world.html defines .ctx-bar-track and .ctx-bar elements');
+  assert(htmlContent.includes('.ctx-low') && htmlContent.includes('.ctx-mid') && htmlContent.includes('.ctx-warn') && htmlContent.includes('.ctx-crit'), 'world.html defines all 4 color thresholds (.ctx-low, .ctx-mid, .ctx-warn, .ctx-crit)');
+  assert(htmlContent.includes('pulseCrit'), 'world.html defines @keyframes pulseCrit for red ceiling warning');
+  assert(htmlContent.includes('renderDeskGauge'), 'world.html implements renderDeskGauge(s, now) helper');
+
+  // Test renderDeskGauge in simulated VM
+  let vmGaugeWorks = false;
+  try {
+    const mockContext = {
+      window: {},
+      h: (tag, attrs, ...children) => ({ tag, attrs, children }),
+      Date: { now: () => 1700000000000 },
+      console
+    };
+    vm.createContext(mockContext);
+    const gaugeScript = `
+      function k(n) { return n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "k" : String(n); }
+      ${htmlContent.match(/function renderDeskGauge[\s\S]*?\n\}/)[0]}
+      const testSample = {
+        metrics: { cost: 1.25, in: 48000, out: 1200 },
+        ctx: 48000,
+        model: "claude-sonnet-4.5"
+      };
+      renderDeskGauge(testSample, 1700000000000);
+    `;
+    const gaugeEl = vm.runInContext(gaugeScript, mockContext);
+    vmGaugeWorks = Boolean(gaugeEl && gaugeEl.attrs && gaugeEl.attrs.class === 'desk-gauge');
+  } catch (e) {
+    console.error('VM renderDeskGauge error:', e);
+  }
+  assert(vmGaugeWorks, 'renderDeskGauge executes and renders DOM structure cleanly in simulated environment');
+
+  // --- 10. Real-Time SSE Terminal / Log Streaming ---
+  console.log('\n--- 10. Real-Time SSE Terminal / Log Streaming ---');
+  const dashCode = fs.readFileSync(AGENT_DASH, 'utf8');
+  assert(dashCode.includes('/api/logs/stream'), 'agent-dashboard.js handles dedicated /api/logs/stream SSE endpoint');
+  assert(dashCode.includes('term_chunk') || dashCode.includes('log_line'), 'agent-dashboard.js supports term_chunk or log_line streaming events');
+  assert(htmlContent.includes('handleTermSSE'), 'world.html implements handleTermSSE() dispatcher');
+  assert(htmlContent.includes('appendTermLine') && htmlContent.includes('appendTermChunk'), 'world.html implements appendTermLine and appendTermChunk terminal methods');
+  assert(htmlContent.includes('addEventListener("log_line"') || htmlContent.includes('d.type === "log_line"'), 'world.html registers SSE handler for log_line events');
+  assert(htmlContent.includes('addEventListener("term_chunk"') || htmlContent.includes('d.type === "term_chunk"'), 'world.html registers SSE handler for term_chunk events');
 
   // --- Summary ---
   console.log('\n====================================================');
