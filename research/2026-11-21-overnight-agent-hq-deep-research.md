@@ -103,8 +103,35 @@ Based on the research, Agent HQ can evolve from an animated viewer into the **de
 
 ---
 
-## 5. Summary & Research Ledger Close
+## 5. Wave 2 Deep Dive: Approval Fatigue & Academic Oversight Limits
 
-* **Screened:** 24 competitive projects, academic studies (MAST, AmPermBench, ControlValve), and architectural paradigms.
-* **Analyzed in Depth:** 12 primary systems (Pixel Agents, Conductor, Superset, GitHub Agent HQ, Devin, Gas Town, Claude Squad, Vibe Kanban, Roo Code, CCManager, claude-control, Agent HQ).
-* **Defensible Differentiator Confirmed:** **Multi-Harness Unification + Spatial HCI + Git Worktree Isolation + Level-1 Rapid Triage**.
+### The 93% "Rubber-Stamping" Dilemma
+Recent empirical studies on human-in-the-loop (HITL) software engineering agents reveal a profound systemic failure mode:
+* **The Approval Cliff:** When developers are subjected to frequent synchronous confirmation prompts, telemetry indicates developers approve **~93% of prompts without thorough evaluation**.
+* **Diminishing Verification:** Catch rates for subtle bugs or permission escalations drop precipitously once a session exceeds 30–50 prompts.
+* **The Multi-Agent Cascade:** In multi-agent systems, fragmented approval requests arrive out-of-order from parallel workers (planner, tester, refactorer), exacerbating mental fatigue and causing developers to bypass checks entirely.
+
+### How Agent HQ Solves This
+1. **Asynchronous Risk Gating (Level-0 vs Level-1 vs Level-3):**
+   * *Level 0 (Zero-Touch):* Idempotent, reversible actions (running unit tests, reading docs, formatting) proceed automatically without human interruption.
+   * *Level 1 (One-Click Pre-Drafted Triage):* For questions requiring user confirmation, Agent HQ's Dispatcher drafts the exact reply citing project policy and presents an instant `[⚡ Accept & Send]` button with `Ctrl+Enter` shortcut.
+   * *Level 3 (Hard Human Stop):* Irreversible actions (spending, git force-push, deleting production assets) require explicit manual intervention.
+
+---
+
+## 6. Emerging Ecosystem Projects (Wave 2 Screened)
+
+* **`pixtuoid/pixtuoid`:** Cozy multi-agent pixel office dashboard to track multiple coding agent sessions without terminal switching. Highlights tool monitor glows and office zones.
+* **`holasoymalva/my-little-office`:** Pixel-art web dashboard paired with a Node runtime letting agents (ChatGPT, Gemini, Grok) clone repos, implement changes, and open PRs.
+* **`altsang/cc-orchestrator`:** Multi-instance Claude Code orchestrator managing isolated Git worktrees and tmux sessions.
+* **`hex/claude-sessions`:** Objective tracking, crash recovery, and parallel worktrees under `.cs/`.
+* **`antonioromano/code-orchestrator`:** Web-based orchestrator spawning Claude Code and Gemini CLI concurrently via browser terminals.
+
+---
+
+## 7. Summary & Research Ledger Checkpoint
+
+* **Screened:** 36 competitive repositories, academic papers, and architectural frameworks.
+* **Analyzed in Depth:** 17 primary tools across visual dashboards, CLI multiplexers, and multi-agent harnesses.
+* **Key Conclusion:** The winning architecture for AI coding agents is **not** unconstrained autonomous swarms (which suffer from cascade failures and approval fatigue), but **Supervised Local-First Orchestration**: spatial visual awareness, git worktree isolation, and single-keystroke risk-calibrated triage.
+
