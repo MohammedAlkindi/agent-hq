@@ -518,3 +518,106 @@ $$\text{Similarity}(T_i, T_{i-1}) = 1 - \frac{\text{Levenshtein}(P_i, P_{i-1})}{
 ## 16. Research Trajectory Checkpoint (04:10 PT)
 
 The investigation has established clear mathematical and algorithmic foundations for multi-agent safety in Agent HQ. The system architecture uniquely balances **high-autonomy execution** with **zero-rubber-stamping human control**, preventing the failure modes that cause competing multi-agent orchestrators to collapse under production workloads.
+
+
+---
+
+## 17. Wave 10: Multi-Harness Telemetry & Economic Efficiency Engine
+
+* **Timestamp:** 2026-11-21 04:50 PT (Iteration 8)
+* **Focus:** Deep telemetry normalization across disparate agent runtimes, dynamic model stepping economics, and operational KPIs for multi-agent software engineering.
+
+### 17.1 Cross-Harness Telemetry Normalization
+
+Autonomous coding agents generate wildly heterogeneous log structures across vendors. To drive unified real-time analytics in `agents-ui/perf.js` and render accurate visual spend gauges on character desks, Agent HQ 2.0 defines the **Universal Turn Metric Protocol (UTMP)**:
+
+```typescript
+interface TurnMetrics {
+  sessionId: string;
+  harness: 'antigravity' | 'claude' | 'codex' | 'generic';
+  turnIndex: number;
+  timestamp: number;
+  tokens: {
+    prompt: number;
+    completion: number;
+    cacheRead: number;
+    cacheWrite: number;
+    total: number;
+  };
+  financial: {
+    costUsd: number;
+    model: string;
+    ratePerMillionPrompt: number;
+    ratePerMillionCompletion: number;
+  };
+  performance: {
+    latencyMs: number;
+    toolExecutionMs: number;
+    networkWaitMs: number;
+  };
+  toolCalls: Array<{
+    name: string;
+    exitCode: number;
+    durationMs: number;
+  }>;
+}
+```
+
+#### Runtime Extraction Adapters:
+* **Google Antigravity:** Ingested from `<appDataDir>/brain/<sid>/.system_generated/logs/transcript.jsonl`. Parses `tool_calls`, `thinking`, and step-level metadata.
+* **Claude Code:** Extracted from session logs and local cost telemetry. Normalizes prompt cache hits (`cache_read_input_tokens`) which reduce Claude 3.5/3.7 inference spend by up to 90%.
+* **OpenAI Codex:** Ingested from local CLI session caches, standardizing raw completion token tallies into the UTMP schema.
+
+---
+
+### 17.2 Economic Efficiency & Dynamic Model Tier Stepping
+
+Multi-agent swarms face an exponential cost curve if homogeneous frontier models (e.g., Claude 3.7 Sonnet, Gemini Pro, GPT-4o) are assigned indiscriminately across all tasks.
+
+#### The 3-Tier Model Specialization Pyramid:
+
+```text
+       ▲
+      / \     Tier 1: Architect (Opus / Pro / o1)
+     /   \    • System design, tricky AST refactoring, security reviews
+    /     \   • Cost: ~$15.00 / 1M completion tokens (Used sparingly: ~10% of turns)
+   /───────\
+  /         \   Tier 2: Builder (Sonnet / Flash / GPT-4o)
+ /           \  • Feature synthesis, unit test generation, worktree merges
+/             \ • Cost: ~$3.00 / 1M completion tokens (Workhorse: ~50% of turns)
+/───────────────\
+/                 \  Tier 3: Scout & Janitor (Haiku / Flash-Lite / Mini)
+/                   \ • Log tailing, regex search, AST parsing, linting
+/─────────────────────\• Cost: ~$0.15 - $0.40 / 1M tokens (Volume: ~40% of turns)
+```
+
+#### Dynamic Model Stepping Heuristics:
+1. **Scout-First Delegation:** Initial research, file discovery, and dependency mapping are spawned on Tier 3 models. Only when concrete edits are staged does Agent HQ promote the task context to Tier 2.
+2. **Failure-Triggered Escalation:** If an agent on Tier 2 encounters a syntax or logic failure on the same file twice, Agent HQ suggests an in-place model switch (`swarm model <name> pro`) preserving the existing worktree state.
+
+---
+
+### 17.3 Developer Productivity KPIs for Multi-Agent Fleets
+
+Rather than tracking raw commits or vanity lines of code, Agent HQ 2.0 tracks three high-signal operational indicators:
+
+1. **Time to First Working Diff (TTFD):**
+   * $\text{TTFD} = t_{\text{first\_clean\_diff}} - t_{\text{dispatch}}$
+   * Target: $\le 90\text{ seconds}$. Measures how quickly an agent transitions from planning to test-passing code.
+2. **Human Intervention Burden (HIB):**
+   * $\text{HIB} = \frac{N_{\text{human\_prompts}} + N_{\text{manual\_rejections}}}{N_{\text{total\_turns}}}$
+   * Target: $\le 0.08$ (less than 1 human intervention per 12 agent turns). Reflects true supervisory autonomy.
+3. **Autonomous Task Velocity (ATV):**
+   * $\text{ATV} = \frac{\Delta \text{Verified LoC}}{\text{Total USD Spent}}$
+   * High ATV indicates high economic leverage; a declining ATV alerts the developer to token loops and attention rot.
+
+---
+
+## 18. Research Trajectory Checkpoint (04:55 PT)
+
+With Wave 10 complete, the research encompasses:
+- Market landscape and competitor teardowns (Waves 1–3).
+- Concurrency, worktree mechanics, and AST conflict resolution (Waves 4–6).
+- System architecture and execution roadmap (Waves 7–8).
+- Failure taxonomy and algorithmic defenses (Wave 9).
+- Telemetry normalization, economic tiered routing, and developer KPIs (Wave 10).
