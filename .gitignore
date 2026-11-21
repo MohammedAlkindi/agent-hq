@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Runtime State & Logs
+.state/
+*.log
+*.tmp
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# OS Metadata
+.DS_Store
+Thumbs.db
+Desktop.ini

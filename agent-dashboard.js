@@ -458,7 +458,7 @@ function refreshWin(now) {
         let rows = JSON.parse(stdout || "[]");
         if (!Array.isArray(rows)) rows = [rows];
         winTasks.rows = rows
-          .filter((r) => /claude|node(\.exe)?\b|github|\\wt\\|mybrain|python/i.test(r.a || "") || /claude/i.test(r.n || ""))
+          .filter((r) => /claude|antigravity|codex|node(\.exe)?\b|github|\\wt\\|agent|python/i.test(r.a || "") || /claude|agent/i.test(r.n || ""))
           .map((r) => ({ name: r.n, state: r.s, last: Date.parse(r.last) || 0, next: Date.parse(r.next) || 0,
             res: r.res, resText: resultText(r.res), action: one(r.a, 160) }));
         winTasks.err = "";

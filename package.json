@@ -1,0 +1,20 @@
+{
+  "name": "agent-hq",
+  "version": "1.0.0",
+  "description": "Local-first visual control plane and animated office simulator for AI coding agents",
+  "main": "agent-dashboard.js",
+  "scripts": {
+    "start": "node agent-dashboard.js --open",
+    "test": "node run-tests.js"
+  },
+  "keywords": [
+    "ai-agents",
+    "multi-agent",
+    "claude-code",
+    "antigravity",
+    "codex",
+    "orchestrator",
+    "developer-tools"
+  ],
+  "license": "MIT"
+}

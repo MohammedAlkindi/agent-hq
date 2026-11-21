@@ -1,0 +1,36 @@
+{
+  "_about": "Policy for the Agent HQ dispatcher (dispatcher.js). It drafts triage replies for sessions waiting on human input. mode 'level1' provides 1-click suggested actions in the UI; mode 'shadow' records what it would send without action.",
+  "mode": "level1",
+  "model": "sonnet",
+  "minConfidence": 0.8,
+  "concurrency": 2,
+  "maxDraftsPerDay": 150,
+  "maxAgeHours": 24,
+  "perSessionPerHour": 3,
+  "rules": [
+    {
+      "id": "R1",
+      "text": "For safe, non-destructive, and reversible actions (running tests, reading documentation, code formatting), proceed autonomously and report results.",
+      "source": "Standard Autonomous Engineering Policy"
+    },
+    {
+      "id": "R2",
+      "text": "When encountering a non-critical error or alternative implementation choice, evaluate best practices and test the safe fallback before asking.",
+      "source": "Engineering Best Practices"
+    },
+    {
+      "id": "R3",
+      "text": "Do not stop mid-task to ask for confirmation when test suites or linting fail; diagnose, fix the syntax or assertion issue, and re-run.",
+      "source": "Continuous Integration Guideline"
+    }
+  ],
+  "alwaysHuman": [
+    "spending, billing, or financial operations",
+    "legal signatures, terms of service, or compliance attestations",
+    "handling credentials, secrets, passwords, or authentication MFA tokens",
+    "destructive operations without backup (git force-push, deleting production tables or remotes)",
+    "personal preferences or unstated business requirements",
+    "explicitly paused or held projects"
+  ],
+  "hold": []
+}
