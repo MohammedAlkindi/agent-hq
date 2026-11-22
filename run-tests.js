@@ -560,6 +560,10 @@ async function main() {
   });
   assert(mergeBlock.ok === false && mergeBlock.blocked === true && mergeBlock.testsFailed === true, 'mergeWorktree blocks ghost merge when speculative tests fail without force');
 
+  assert(typeof wtModule.pruneInactiveWorktrees === 'function', 'worktrees.js exports pruneInactiveWorktrees');
+  const pruneTestRes = await wtModule.pruneInactiveWorktrees({ maxAgeHours: 999999 });
+  assert(pruneTestRes && pruneTestRes.ok === true && Array.isArray(pruneTestRes.pruned), 'pruneInactiveWorktrees runs safely and returns pruned array');
+
   // --- 13. In-Flight Secret Redaction Proxy (agent-dashboard.js) ---
   console.log('\n--- 13. In-Flight Secret Redaction Proxy (agent-dashboard.js) ---');
   assert(typeof dashModule.sanitizeStream === 'function', 'agent-dashboard.js exports sanitizeStream() function');

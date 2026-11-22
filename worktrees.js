@@ -216,7 +216,7 @@ async function runSpeculativeTests({ repo, path: wtPath, branch, command, timeou
   });
 }
 
-async function mergeWorktree({ repo, path: wtPath, branch, target = "main", message, runTests = false, force = false, testCommand }) {
+async function mergeWorktree({ repo, path: wtPath, branch, target = "main", message, runTests = false, force = false, testCommand, cleanup = true, deleteBranch = true }) {
   let root = repo;
   if (!root && wtPath) root = await findRepoRoot(wtPath);
   if (!root) return { ok: false, msg: "Repository root could not be determined." };
@@ -251,10 +251,27 @@ async function mergeWorktree({ repo, path: wtPath, branch, target = "main", mess
     return { ok: false, msg: `Merge failed: ${mergeRes.err || mergeRes.out}` };
   }
 
+  let cleanedUp = false;
+  let branchDeleted = false;
+  if (cleanup && wtPath && wtPath !== root) {
+    await cleanupWorktree({ repo: root, path: wtPath, branch: deleteBranch ? branchToMerge : null, force: true });
+    cleanedUp = true;
+    branchDeleted = Boolean(deleteBranch);
+  } else if (deleteBranch && branchToMerge && branchToMerge !== target) {
+    await gitExec(["branch", "-d", branchToMerge], root);
+    branchDeleted = true;
+  }
+
+  if (root) {
+    await gitExec(["worktree", "prune"], root);
+  }
+
   return {
     ok: true,
-    msg: `Merged "${branchToMerge}" into "${target}" successfully.`,
+    msg: `Merged "${branchToMerge}" into "${target}" successfully.` + (cleanedUp ? ` Cleaned up worktree and deleted branch.` : ""),
     out: mergeRes.out.trim(),
+    cleanedUp,
+    branchDeleted,
   };
 }
 
@@ -410,6 +427,52 @@ async function getDiffForSession(session, allStates) {
   };
 }
 
+async function pruneInactiveWorktrees({ maxAgeHours = 48, force = false, repoFilter } = {}) {
+  const all = await listWorktrees(repoFilter);
+  const maxAgeMs = maxAgeHours * 3600 * 1000;
+  const pruned = [];
+  const skipped = [];
+
+  for (const wt of all) {
+    // Never prune if there are modified files unless force is explicitly true
+    if (wt.modified > 0 && !force) {
+      skipped.push({ path: wt.path, name: wt.name, reason: `${wt.modified} uncommitted modifications` });
+      continue;
+    }
+
+    // Check if branch is merged
+    let isMerged = false;
+    if (wt.repo && wt.branch && wt.branch !== "main" && wt.branch !== "master") {
+      const checkMerged = await gitExec(["branch", "--merged", "main"], wt.repo);
+      if (checkMerged.ok && checkMerged.out.split("\n").map(s => s.trim().replace(/^\*\s*/, "")).includes(wt.branch)) {
+        isMerged = true;
+      }
+    }
+
+    const isOld = wt.age >= maxAgeMs;
+    const isMainBranch = wt.branch === "main" || wt.branch === "master";
+
+    if ((isMerged || isOld) && (!isMainBranch || !wt.isWorktree || force)) {
+      try {
+        await cleanupWorktree({ repo: wt.repo, path: wt.path, branch: isMainBranch ? null : wt.branch, force: true });
+        pruned.push({ path: wt.path, name: wt.name, branch: wt.branch, reason: isMerged ? "branch merged" : `inactive (${(wt.age / 3600000).toFixed(1)}h old)` });
+      } catch (err) {
+        skipped.push({ path: wt.path, name: wt.name, reason: err.message });
+      }
+    } else {
+      skipped.push({ path: wt.path, name: wt.name, reason: isMainBranch ? "main/master branch" : `active (${(wt.age / 3600000).toFixed(1)}h old)` });
+    }
+  }
+
+  // Final prune pass across repositories
+  const touchedRepos = new Set(all.map(w => w.repo).filter(Boolean));
+  for (const r of touchedRepos) {
+    await gitExec(["worktree", "prune"], r);
+  }
+
+  return { ok: true, pruned, skipped };
+}
+
 module.exports = {
   WORKTREE_DIR,
   LEGACY_WT_DIR,
@@ -420,6 +483,7 @@ module.exports = {
   createWorktree,
   mergeWorktree,
   cleanupWorktree,
+  pruneInactiveWorktrees,
   getDiffForSession,
   runSpeculativeTests,
 };

@@ -54,3 +54,33 @@ Automated decision history maintained by Agent HQ Cognitive Memory Fabric.
 
 ---
 
+## ADR-MWRK1YWW: Adopt SQLite Coordination
+- **Date**: 2026-11-22T08:08:35.839Z
+- **Status**: accepted
+- **Session**: session-qa-mem
+- **Branch**: main
+- **Decision**: Use Node 24 native DatabaseSync for stateful leases
+- **Rationale**: Zero external dependencies and instant lock acquisition
+
+---
+
+## ADR-MWRK4MEY: Adopt SQLite Coordination
+- **Date**: 2026-11-22T08:10:39.608Z
+- **Status**: accepted
+- **Session**: session-qa-mem
+- **Branch**: main
+- **Decision**: Use Node 24 native DatabaseSync for stateful leases
+- **Rationale**: Zero external dependencies and instant lock acquisition
+
+---
+
+## ADR-MWRK551U: Adopt SQLite Coordination
+- **Date**: 2026-11-22T08:11:03.760Z
+- **Status**: accepted
+- **Session**: session-qa-mem
+- **Branch**: main
+- **Decision**: Use Node 24 native DatabaseSync for stateful leases
+- **Rationale**: Zero external dependencies and instant lock acquisition
+
+---
+

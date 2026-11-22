@@ -1405,6 +1405,11 @@ function serve(options = {}) {
           json(res, out.ok ? 200 : 400, out);
           return;
         }
+        if (u === "/api/worktree/prune") {
+          const out = await worktrees.pruneInactiveWorktrees(body);
+          json(res, out.ok ? 200 : 400, out);
+          return;
+        }
         if (u === "/api/leases/acquire") {
           const sessionId = String(body.sessionId || body.sid || "").trim();
           const filePath = String(body.filePath || body.path || "").trim();

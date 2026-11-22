@@ -39,3 +39,24 @@ Operational pitfalls and architectural constraints to guard against regressions.
 
 ---
 
+### [WARNING] Concurrent Worktree SQLite Access
+- **Component**: coordination
+- **Constraint**: Must enable WAL mode on database connections
+- **Recorded**: 2026-11-22T08:08:35.866Z by session `session-qa-mem`
+
+---
+
+### [WARNING] Concurrent Worktree SQLite Access
+- **Component**: coordination
+- **Constraint**: Must enable WAL mode on database connections
+- **Recorded**: 2026-11-22T08:10:39.614Z by session `session-qa-mem`
+
+---
+
+### [WARNING] Concurrent Worktree SQLite Access
+- **Component**: coordination
+- **Constraint**: Must enable WAL mode on database connections
+- **Recorded**: 2026-11-22T08:11:03.765Z by session `session-qa-mem`
+
+---
+
