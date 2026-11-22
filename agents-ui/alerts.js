@@ -171,6 +171,9 @@ function chime(kind) {
         o.stop(t + note.d + 0.02);
         t += note.d * 0.85;
       });
+    } else if (kind === "loop" || kind === "alarm" || kind === "thrash") {
+      loopAlarm();
+      return;
     } else {
       // Generic pleasant blip
       const o = ctx.createOscillator(), g = ctx.createGain();
@@ -184,6 +187,40 @@ function chime(kind) {
       o.stop(t0 + 0.20);
     }
   } catch {}
+}
+
+function loopAlarm() {
+  if (!AL.sound) return;
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    AL.ctx = AL.ctx || new AudioCtx();
+    const ctx = AL.ctx;
+    if (ctx.state === "suspended") ctx.resume();
+    const t0 = ctx.currentTime + 0.01;
+
+    // 8-bit descending alarm chime for loop thrashing / circuit breaker:
+    // 4 descending sawtooth warning pulses (440Hz -> 330Hz -> 220Hz -> 110Hz)
+    const tones = [440, 330, 220, 110];
+    tones.forEach((freq, idx) => {
+      const t = t0 + idx * 0.11;
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = "sawtooth";
+      o.frequency.setValueAtTime(freq, t);
+      o.frequency.exponentialRampToValueAtTime(Math.max(freq * 0.5, 50), t + 0.09);
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.20, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.10);
+      o.connect(g).connect(ctx.destination);
+      o.start(t);
+      o.stop(t + 0.11);
+    });
+  } catch {}
+}
+
+if (typeof window !== "undefined") {
+  window.loopAlarm = loopAlarm;
+  window.chime = chime;
 }
 
 function notify(title, body, id) {

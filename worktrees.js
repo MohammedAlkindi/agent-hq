@@ -163,13 +163,80 @@ async function createWorktree({ repo, sid, name, branch }) {
   };
 }
 
-async function mergeWorktree({ repo, path: wtPath, branch, target = "main", message }) {
+async function runSpeculativeTests({ repo, path: wtPath, branch, command, timeout = 60000 }) {
+  let cwd = wtPath;
+  if (!cwd && repo) cwd = repo;
+  if (!cwd || !fs.existsSync(cwd)) {
+    return {
+      ok: false,
+      passed: false,
+      code: 1,
+      out: "",
+      err: `Target directory not found: ${cwd || "(empty)"}`,
+      msg: `Target directory not found: ${cwd || "(empty)"}`,
+    };
+  }
+
+  let cmd = command;
+  if (!cmd) {
+    const pkgPath = path.join(cwd, "package.json");
+    if (fs.existsSync(pkgPath)) {
+      try {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+        if (pkg.scripts && pkg.scripts.test) {
+          cmd = "npm test";
+        }
+      } catch {}
+    }
+    if (!cmd && fs.existsSync(path.join(cwd, "run-tests.js"))) {
+      cmd = "node run-tests.js";
+    }
+    if (!cmd) {
+      cmd = "npm test";
+    }
+  }
+
+  return new Promise((resolve) => {
+    cp.exec(cmd, { cwd, timeout, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
+      const out = String(stdout || "");
+      const errOut = String(stderr || (err ? err.message : ""));
+      const code = err ? (err.code || 1) : 0;
+      const passed = !err;
+      resolve({
+        ok: passed,
+        passed,
+        code,
+        command: cmd,
+        cwd,
+        out,
+        err: errOut,
+        msg: passed ? `Speculative pre-flight tests passed: ${cmd}` : `Speculative pre-flight tests failed (${code}): ${cmd}`,
+      });
+    });
+  });
+}
+
+async function mergeWorktree({ repo, path: wtPath, branch, target = "main", message, runTests = false, force = false, testCommand }) {
   let root = repo;
   if (!root && wtPath) root = await findRepoRoot(wtPath);
   if (!root) return { ok: false, msg: "Repository root could not be determined." };
 
   const branchToMerge = branch || (wtPath ? await getBranchName(wtPath) : "");
   if (!branchToMerge) return { ok: false, msg: "Branch name is required to merge." };
+
+  // Run speculative pre-flight tests inside the worktree before merging if requested
+  if (runTests && wtPath) {
+    const testRes = await runSpeculativeTests({ repo: root, path: wtPath, branch: branchToMerge, command: testCommand });
+    if (!testRes.passed && !force) {
+      return {
+        ok: false,
+        blocked: true,
+        testsFailed: true,
+        testResult: testRes,
+        msg: `Pre-flight speculative tests failed. Ghost merge blocked (use force: true to override): ${testRes.err || testRes.out}`,
+      };
+    }
+  }
 
   // Check if target branch exists
   const checkTarget = await gitExec(["rev-parse", "--verify", target], root);
@@ -354,4 +421,5 @@ module.exports = {
   mergeWorktree,
   cleanupWorktree,
   getDiffForSession,
+  runSpeculativeTests,
 };

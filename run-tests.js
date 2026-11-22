@@ -13,7 +13,13 @@ const WORLD_HTML = path.join(UI_DIR, 'world.html');
 const WORKTREES_JS = path.join(ROOT, 'worktrees.js');
 const DISPATCHER_JS = path.join(ROOT, 'dispatcher.js');
 const POLICY_JSON = path.join(ROOT, 'dispatcher-policy.json');
+const COORDINATION_JS = path.join(ROOT, 'coordination.js');
+const KNOWLEDGE_JS = path.join(ROOT, 'knowledge.js');
 const TEST_PORT = 7795;
+
+const dashModule = require(AGENT_DASH);
+const coordination = require(COORDINATION_JS);
+const knowledge = require(KNOWLEDGE_JS);
 
 let passed = 0;
 let failed = 0;
@@ -374,6 +380,66 @@ async function main() {
       assert(logStreamOk, 'GET /api/logs/stream provides dedicated text/event-stream SSE log feed');
     }
 
+    // --- Coordination API Endpoints Integration ---
+    // POST /api/leases/acquire
+    const testFile = 'test-coordination-target.js';
+    const acqRes1 = await fetchHttp(`http://127.0.0.1:${TEST_PORT}/api/leases/acquire`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: 'session-qa-1', filePath: testFile, type: 'exclusive_write', ttlMs: 5000 })
+    });
+    assert(acqRes1.status === 200, 'POST /api/leases/acquire returns 200 OK on first lease grant');
+    const acq1Json = JSON.parse(acqRes1.body);
+    assert(acq1Json.ok === true && acq1Json.leaseId, 'POST /api/leases/acquire grants lease with leaseId');
+
+    // POST /api/leases/acquire contention
+    const acqRes2 = await fetchHttp(`http://127.0.0.1:${TEST_PORT}/api/leases/acquire`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: 'session-qa-2', filePath: testFile, type: 'shared_read' })
+    });
+    assert(acqRes2.status === 409, 'POST /api/leases/acquire returns 409 Conflict under file contention');
+    const acq2Json = JSON.parse(acqRes2.body);
+    assert(acq2Json.error === 'CONTENTION' && acq2Json.blockingSession === 'session-qa-1', 'Contention correctly identifies blockingSession');
+
+    // GET /api/leases/active
+    const leasesRes = await fetchHttp(`http://127.0.0.1:${TEST_PORT}/api/leases/active`);
+    assert(leasesRes.status === 200, 'GET /api/leases/active returns 200 OK');
+    const leasesJson = JSON.parse(leasesRes.body);
+    assert(leasesJson.ok === true && Array.isArray(leasesJson.leases) && leasesJson.leases.some((l) => l.file_path === testFile), 'Active leases array lists currently acquired lease');
+
+    // POST /api/leases/release
+    const relRes = await fetchHttp(`http://127.0.0.1:${TEST_PORT}/api/leases/release`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: 'session-qa-1', filePath: testFile })
+    });
+    assert(relRes.status === 200, 'POST /api/leases/release returns 200 OK');
+    const relJson = JSON.parse(relRes.body);
+    assert(relJson.ok === true, 'Lease released successfully');
+
+    // POST /api/intent/broadcast
+    const intentRes = await fetchHttp(`http://127.0.0.1:${TEST_PORT}/api/intent/broadcast`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: 'session-qa-1', message: 'Refactoring auth router', files: ['auth.js', 'user.js'] })
+    });
+    assert(intentRes.status === 200, 'POST /api/intent/broadcast returns 200 OK');
+    const intentJson = JSON.parse(intentRes.body);
+    assert(intentJson.ok === true, 'Intent broadcast recorded successfully');
+
+    // Remote HMAC Webhook Approval Endpoint (/api/dispatch/webhook-approve)
+    const webhookToken = dashModule.generateWebhookToken ? dashModule.generateWebhookToken('sample-sid-qa', 'approve') : '';
+    const badWebhookRes = await fetchHttp(`http://127.0.0.1:${TEST_PORT}/api/dispatch/webhook-approve?token=bad-token&sid=sample-sid-qa&decision=approve`);
+    assert(badWebhookRes.status === 403, 'GET /api/dispatch/webhook-approve rejects invalid HMAC signature with 403 Forbidden');
+
+    if (webhookToken) {
+      const goodWebhookRes = await fetchHttp(`http://127.0.0.1:${TEST_PORT}/api/dispatch/webhook-approve?token=${webhookToken}&sid=sample-sid-qa&decision=approve`);
+      assert(goodWebhookRes.status === 200, 'GET /api/dispatch/webhook-approve accepts valid HMAC signature with 200 OK');
+      const webhookJson = JSON.parse(goodWebhookRes.body);
+      assert(webhookJson.ok === true && webhookJson.decision === 'approve', 'Webhook response confirms approved decision');
+    }
+
   } finally {
     serverProc.kill('SIGKILL');
   }
@@ -440,6 +506,150 @@ async function main() {
   assert(htmlContent.includes('appendTermLine') && htmlContent.includes('appendTermChunk'), 'world.html implements appendTermLine and appendTermChunk terminal methods');
   assert(htmlContent.includes('addEventListener("log_line"') || htmlContent.includes('d.type === "log_line"'), 'world.html registers SSE handler for log_line events');
   assert(htmlContent.includes('addEventListener("term_chunk"') || htmlContent.includes('d.type === "term_chunk"'), 'world.html registers SSE handler for term_chunk events');
+
+  // --- 11. SQLite Coordination Engine (coordination.js) ---
+  console.log('\n--- 11. SQLite Coordination Engine (coordination.js) ---');
+  const coordDb = coordination.initCoordination();
+  assert(Boolean(coordDb), 'coordination.initCoordination() initializes SQLite database');
+
+  const unitFile = 'coordination-unit-test.ts';
+  const unitLease1 = coordination.acquireLease('sess-unit-1', unitFile, 'exclusive_write', 1000);
+  assert(unitLease1.ok === true && unitLease1.leaseId, 'coordination.acquireLease grants exclusive_write lease');
+
+  const unitLease2 = coordination.acquireLease('sess-unit-2', unitFile, 'shared_read', 1000);
+  assert(unitLease2.ok === false && unitLease2.error === 'CONTENTION' && unitLease2.blockingSession === 'sess-unit-1', 'coordination.acquireLease detects contention against exclusive_write');
+
+  const unitRenew = coordination.renewLeases('sess-unit-1', 5000);
+  assert(unitRenew.ok === true, 'coordination.renewLeases extends heartbeat TTL');
+
+  const unitActive = coordination.getActiveLeases();
+  assert(Array.isArray(unitActive) && unitActive.some((l) => l.file_path === unitFile), 'coordination.getActiveLeases lists active leases');
+
+  const unitRel = coordination.releaseLease('sess-unit-1', unitFile);
+  assert(unitRel.ok === true, 'coordination.releaseLease releases active lease');
+
+  const unitReap = coordination.reapStaleLeases();
+  assert(unitReap.ok === true, 'coordination.reapStaleLeases completes successfully');
+
+  const unitBroadcast = coordination.broadcastIntent('sess-unit-1', 'Refactoring schema', [unitFile]);
+  assert(unitBroadcast.ok === true, 'coordination.broadcastIntent records intent broadcast');
+
+  // --- 12. Worktree Safety & Speculative Pre-Flight Tests (worktrees.js) ---
+  console.log('\n--- 12. Worktree Safety & Speculative Pre-Flight Tests (worktrees.js) ---');
+  const specPass = await wtModule.runSpeculativeTests({
+    repo: ROOT,
+    path: ROOT,
+    command: 'node -e "process.exit(0)"'
+  });
+  assert(specPass.ok === true && specPass.passed === true, 'runSpeculativeTests returns passed: true on passing test command');
+
+  const specFail = await wtModule.runSpeculativeTests({
+    repo: ROOT,
+    path: ROOT,
+    command: 'node -e "process.exit(1)"'
+  });
+  assert(specFail.passed === false && specFail.code !== 0, 'runSpeculativeTests returns passed: false on failing test command');
+
+  const mergeBlock = await wtModule.mergeWorktree({
+    repo: ROOT,
+    path: ROOT,
+    branch: 'non-existent-test-branch-qa',
+    runTests: true,
+    testCommand: 'node -e "process.exit(1)"',
+    force: false
+  });
+  assert(mergeBlock.ok === false && mergeBlock.blocked === true && mergeBlock.testsFailed === true, 'mergeWorktree blocks ghost merge when speculative tests fail without force');
+
+  // --- 13. In-Flight Secret Redaction Proxy (agent-dashboard.js) ---
+  console.log('\n--- 13. In-Flight Secret Redaction Proxy (agent-dashboard.js) ---');
+  assert(typeof dashModule.sanitizeStream === 'function', 'agent-dashboard.js exports sanitizeStream() function');
+  const dummyOai = ['sk', 'proj', '1234567890abcdef1234567890'].join('-');
+  const dummyGhp = ['ghp', 'abcdefghijklmnopqrstuvwxyz123456'].join('_');
+  const dummyGgl = ['AIzaSy', 'TestKey123456789012345678901234'].join('');
+  const dummyAws = ['AKIA', '1234567890ABCDEF'].join('');
+  const dummyBear = ['Bearer', 'secret_bearer_token_12345'].join(' ');
+
+  const dirtySecretStr = [
+    `OpenAI: ${dummyOai}`,
+    `GitHub: ${dummyGhp}`,
+    `Google: ${dummyGgl}`,
+    `AWS: ${dummyAws}`,
+    `Auth: ${dummyBear}`
+  ].join('\n');
+  const cleanSecretStr = dashModule.sanitizeStream(dirtySecretStr);
+  assert(!cleanSecretStr.includes(dummyOai) && cleanSecretStr.includes('sk-[REDACTED]'), 'sanitizeStream scrubs OpenAI sk- keys');
+  assert(!cleanSecretStr.includes(dummyGhp) && cleanSecretStr.includes('ghp_[REDACTED]'), 'sanitizeStream scrubs GitHub ghp_ tokens');
+  assert(!cleanSecretStr.includes(dummyGgl) && cleanSecretStr.includes('AIza[REDACTED]'), 'sanitizeStream scrubs Google AIza keys');
+  assert(!cleanSecretStr.includes(dummyAws) && cleanSecretStr.includes('AKIA[REDACTED]'), 'sanitizeStream scrubs AWS AKIA keys');
+  assert(!cleanSecretStr.includes(dummyBear) && cleanSecretStr.includes('Bearer [REDACTED]'), 'sanitizeStream scrubs Bearer authorization tokens');
+
+  // --- 14. Remote HMAC Webhook Verification (agent-dashboard.js) ---
+  console.log('\n--- 14. Remote HMAC Webhook Verification (agent-dashboard.js) ---');
+  assert(typeof dashModule.generateWebhookToken === 'function', 'agent-dashboard.js exports generateWebhookToken');
+  assert(typeof dashModule.verifyWebhookToken === 'function', 'agent-dashboard.js exports verifyWebhookToken');
+  const unitToken = dashModule.generateWebhookToken('sess-unit-qa', 'approve');
+  assert(typeof unitToken === 'string' && unitToken.length === 64, 'generateWebhookToken produces 64-char SHA-256 HMAC hex token');
+  assert(dashModule.verifyWebhookToken(unitToken, 'sess-unit-qa', 'approve') === true, 'verifyWebhookToken validates authentic token');
+  assert(dashModule.verifyWebhookToken(unitToken, 'sess-unit-qa', 'reject') === false, 'verifyWebhookToken rejects mismatched decision');
+  assert(dashModule.verifyWebhookToken(unitToken, 'other-session', 'approve') === false, 'verifyWebhookToken rejects mismatched session');
+  assert(dashModule.verifyWebhookToken('tamperedtoken1234567890', 'sess-unit-qa', 'approve') === false, 'verifyWebhookToken rejects tampered token');
+
+  // --- 15. Cognitive Memory Fabric (knowledge.js) ---
+  console.log('\n--- 15. Cognitive Memory Fabric (knowledge.js) ---');
+  assert(typeof knowledge.recordDecision === 'function', 'knowledge.js exports recordDecision');
+  assert(typeof knowledge.recordGotcha === 'function', 'knowledge.js exports recordGotcha');
+  assert(typeof knowledge.addTriple === 'function', 'knowledge.js exports addTriple');
+  assert(typeof knowledge.readDecisions === 'function', 'knowledge.js exports readDecisions');
+  assert(typeof knowledge.readGotchas === 'function', 'knowledge.js exports readGotchas');
+  assert(typeof knowledge.readGraph === 'function', 'knowledge.js exports readGraph');
+  assert(typeof knowledge.getKnowledgeSummary === 'function', 'knowledge.js exports getKnowledgeSummary');
+
+  const adrRes = knowledge.recordDecision({
+    title: 'Adopt SQLite Coordination',
+    decision: 'Use Node 24 native DatabaseSync for stateful leases',
+    rationale: 'Zero external dependencies and instant lock acquisition',
+    status: 'accepted',
+    sessionId: 'session-qa-mem'
+  });
+  assert(adrRes.ok === true && adrRes.adrId && adrRes.adrId.startsWith('ADR-'), 'recordDecision writes structured ADR with ADR-ID');
+
+  const adrRead = knowledge.readDecisions();
+  assert(adrRead.ok === true && Array.isArray(adrRead.adrs) && adrRead.adrs.some((a) => a.id === adrRes.adrId), 'readDecisions parses recorded ADRs from decisions.md');
+
+  const gotchaRes = knowledge.recordGotcha({
+    issue: 'Concurrent Worktree SQLite Access',
+    constraint: 'Must enable WAL mode on database connections',
+    severity: 'warning',
+    component: 'coordination',
+    sessionId: 'session-qa-mem'
+  });
+  assert(gotchaRes.ok === true, 'recordGotcha writes hazard and constraint to gotchas.md');
+
+  const gotchaRead = knowledge.readGotchas();
+  assert(gotchaRead.ok === true && gotchaRead.text && gotchaRead.text.includes('Concurrent Worktree SQLite Access'), 'readGotchas returns markdown text from gotchas.md');
+
+  const tripleRes = knowledge.addTriple({
+    subject: 'CoordinationEngine',
+    predicate: 'dependsOn',
+    object: 'Node24DatabaseSync',
+    sessionId: 'session-qa-mem'
+  });
+  assert(tripleRes.ok === true, 'addTriple writes entity relationship triple to graph.jsonl');
+
+  const graphRead = knowledge.readGraph();
+  assert(graphRead.ok === true && Array.isArray(graphRead.triples) && graphRead.triples.some((t) => t.subject === 'CoordinationEngine'), 'readGraph parses entity triples from graph.jsonl');
+
+  const knowSummary = knowledge.getKnowledgeSummary();
+  assert(knowSummary.ok === true && typeof knowSummary.decisionsCount === 'number' && typeof knowSummary.triplesCount === 'number', 'getKnowledgeSummary returns combined counts for decisions and graph triples');
+
+  // --- 16. Loop Thrashing Circuit Breaker UI ---
+  console.log('\n--- 16. Loop Thrashing Circuit Breaker UI ---');
+  assert(htmlContent.includes('.desk-loop-alert'), 'world.html defines .desk-loop-alert amber warning pulse styling');
+  assert(htmlContent.includes('amberPulse'), 'world.html defines @keyframes amberPulse for loop thrashing alert');
+  assert(alertsCode.includes('loopAlarm'), 'alerts.js defines loopAlarm() procedural 8-bit descending audio chime');
+  assert(trayJsContent.includes('loop thrashing') || trayJsContent.includes('Loop thrashing'), 'tray.js identifies loop thrashing condition');
+  assert(trayJsContent.includes('Nudge'), 'tray.js provides [💡 Nudge] action button');
+  assert(trayJsContent.includes('Revert Commit'), 'tray.js provides [🔄 Revert Commit] action button');
 
   // --- Summary ---
   console.log('\n====================================================');

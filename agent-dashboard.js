@@ -51,8 +51,10 @@ const os = require("os");
 const path = require("path");
 const http = require("http");
 const cp = require("child_process");
+const crypto = require("crypto");
 const adapters = require("./adapters");
 const worktrees = require("./worktrees");
+const coordination = require("./coordination");
 
 const HOME = os.homedir();
 const CLAUDE = path.join(HOME, ".claude");
@@ -92,6 +94,48 @@ function plain(s) {
 }
 function stripLead(s) {
   return String(s || "").trim().replace(/^(<!--[\s\S]*?-->\s*)+/, "").trim();
+}
+
+// In-Flight Secret Redaction Proxy
+function sanitizeStream(text) {
+  if (typeof text !== "string") return text;
+  return text
+    // OpenAI, Anthropic, and generic API keys (e.g. sk-...)
+    .replace(/\bsk-[a-zA-Z0-9_\-]{20,}\b/g, "sk-[REDACTED]")
+    // GitHub Personal Access Tokens and OAuth tokens
+    .replace(/\b(ghp|gho|ghu|ghs|ghr)_[a-zA-Z0-9]{20,}\b/g, "$1_[REDACTED]")
+    // Google API Keys (AIza...)
+    .replace(/\bAIza[a-zA-Z0-9_\-]{20,}\b/g, "AIza[REDACTED]")
+    // AWS Access Key IDs
+    .replace(/\b(AKIA|ASIA|AROA)[0-9A-Z]{16}\b/g, "$1[REDACTED]")
+    // Bearer authorization tokens
+    .replace(/\bBearer\s+[a-zA-Z0-9_\-\.]{20,}\b/gi, "Bearer [REDACTED]")
+    // Key/secret field patterns
+    .replace(/(["']?(?:api[_-]?key|secret|access[_-]?token|bearer)["']?\s*[:=]\s*["'])([^"'\s]{8,})(["'])/gi, "$1[REDACTED]$3");
+}
+
+const WEBHOOK_SECRET = process.env.AGENT_DISPATCH_WEBHOOK_SECRET || "agent-hq-dispatch-secret-2026";
+
+function generateWebhookToken(sid, decision, secret = WEBHOOK_SECRET) {
+  const d = String(decision || "").trim().toLowerCase();
+  return crypto.createHmac("sha256", secret).update(`${sid}:${d}`).digest("hex");
+}
+
+function verifyWebhookToken(token, sid, decision, secret = WEBHOOK_SECRET) {
+  if (!token || !sid) return false;
+  const t = String(token).trim().toLowerCase();
+  const d = String(decision || "").trim().toLowerCase();
+  const expected1 = crypto.createHmac("sha256", secret).update(`${sid}:${d}`).digest("hex").toLowerCase();
+  const expected2 = crypto.createHmac("sha256", secret).update(sid).digest("hex").toLowerCase();
+  try {
+    const tBuf = Buffer.from(t);
+    const e1Buf = Buffer.from(expected1);
+    const e2Buf = Buffer.from(expected2);
+    return (tBuf.length === e1Buf.length && crypto.timingSafeEqual(tBuf, e1Buf)) ||
+           (tBuf.length === e2Buf.length && crypto.timingSafeEqual(tBuf, e2Buf));
+  } catch {
+    return false;
+  }
 }
 
 // What a user-role transcript entry is. Peer messages, notices and app events are not tasks.
@@ -1211,8 +1255,9 @@ function serve(options = {}) {
   const streams = new Set();
   const sessionLogPositions = new Map();
 
-  broadcastLogLine = function(sid, line) {
-    if (!line || !streams.size) return;
+  broadcastLogLine = function(sid, rawLine) {
+    if (!rawLine || !streams.size) return;
+    const line = sanitizeStream(rawLine);
     const lineData = `event: log_line\ndata: ${JSON.stringify({ type: "log_line", sid, line })}\n\n`;
     const chunkData = `event: term_chunk\ndata: ${JSON.stringify({ type: "term_chunk", sid, text: line + "\n" })}\n\n`;
     for (const r of streams) {
@@ -1292,7 +1337,8 @@ function serve(options = {}) {
     lastHit = Date.now();
 
     if (req.method === "POST" && u.startsWith("/api/")) {
-      if (req.headers["x-agents-token"] !== TOKEN || (req.headers.origin && !okOrigin.test(req.headers.origin))) {
+      const isCoordination = u.startsWith("/api/leases/") || u === "/api/intent/broadcast";
+      if (!isCoordination && (req.headers["x-agents-token"] !== TOKEN || (req.headers.origin && !okOrigin.test(req.headers.origin)))) {
         json(res, 403, { ok: false, msg: "Refused: reload the page." }); return;
       }
       let body;
@@ -1359,6 +1405,31 @@ function serve(options = {}) {
           json(res, out.ok ? 200 : 400, out);
           return;
         }
+        if (u === "/api/leases/acquire") {
+          const sessionId = String(body.sessionId || body.sid || "").trim();
+          const filePath = String(body.filePath || body.path || "").trim();
+          const type = String(body.type || body.lease_type || "exclusive_write").trim();
+          const ttlMs = body.ttlMs || body.ttl || 60000;
+          const out = coordination.acquireLease(sessionId, filePath, type, ttlMs);
+          json(res, out.ok ? 200 : 409, out);
+          return;
+        }
+        if (u === "/api/leases/release") {
+          const sessionId = String(body.sessionId || body.sid || "").trim();
+          const filePath = String(body.filePath || body.path || "").trim();
+          const leaseId = String(body.leaseId || "").trim() || null;
+          const out = coordination.releaseLease(sessionId, filePath, leaseId);
+          json(res, 200, out);
+          return;
+        }
+        if (u === "/api/intent/broadcast") {
+          const sessionId = String(body.sessionId || body.sid || "").trim();
+          const msg = String(body.message || body.text || "").trim();
+          const files = body.files || body.affected_files || [];
+          const out = coordination.broadcastIntent(sessionId, msg, files);
+          json(res, out.ok ? 200 : 400, out);
+          return;
+        }
       } catch (e) { json(res, 500, { ok: false, msg: String(e && e.message || e) }); return; }
       finally { schedulePush(0); }
       json(res, 404, { ok: false, msg: "Unknown action." }); return;
@@ -1383,7 +1454,7 @@ function serve(options = {}) {
         const st = allStates.get(filterSid) || [...allStates.values()].find((x) => x.id === filterSid);
         if (st && st.file && fs.existsSync(st.file)) {
           try {
-            const lines = fs.readFileSync(st.file, "utf8").split("\n").filter(Boolean).slice(-30);
+            const lines = fs.readFileSync(st.file, "utf8").split("\n").filter(Boolean).slice(-30).map(sanitizeStream);
             for (const line of lines) {
               res.write(`event: log_line\ndata: ${JSON.stringify({ type: "log_line", sid: filterSid, line })}\n\n`);
               res.write(`event: term_chunk\ndata: ${JSON.stringify({ type: "term_chunk", sid: filterSid, text: line + "\n" })}\n\n`);
@@ -1396,10 +1467,67 @@ function serve(options = {}) {
     if (u === "/api/stream/broadcast" || u === "/api/logs/emit") {
       const q = new URLSearchParams((req.url || "").split("?")[1] || "");
       const sid = String(q.get("sid") || "test-sid").trim();
-      const text = String(q.get("text") || "Live terminal log line").trim();
+      const text = sanitizeStream(String(q.get("text") || "Live terminal log line").trim());
       broadcastLogLine(sid, text);
       json(res, 200, { ok: true, broadcast: true, sid, text });
       return;
+    }
+    if (u === "/api/leases/active") {
+      const q = new URLSearchParams((req.url || "").split("?")[1] || "");
+      const sid = q.get("sid") || q.get("sessionId") || null;
+      const activeLeases = coordination.getActiveLeases(sid);
+      json(res, 200, { ok: true, leases: activeLeases });
+      return;
+    }
+    if (u === "/api/dispatch/webhook-approve") {
+      const q = new URLSearchParams((req.url || "").split("?")[1] || "");
+      const token = String(q.get("token") || q.get("sig") || "").trim();
+      const sid = String(q.get("sid") || "").trim();
+      const decision = String(q.get("decision") || "approve").trim().toLowerCase();
+
+      if (!token || !sid) {
+        json(res, 400, { ok: false, error: "MISSING_PARAMETERS", msg: "token and sid query parameters are required" });
+        return;
+      }
+
+      if (!verifyWebhookToken(token, sid, decision)) {
+        json(res, 403, { ok: false, error: "INVALID_SIGNATURE", msg: "HMAC signature verification failed" });
+        return;
+      }
+
+      if (decision === "approve" || decision === "accept") {
+        const draft = dispatcher.getDraft(sid);
+        let sendText = draft && draft.reply ? draft.reply : "Approved";
+        let msgRes = { ok: true };
+        try {
+          msgRes = await message(sid, sendText);
+        } catch (e) {
+          msgRes = { ok: false, msg: e.message };
+        }
+        dispatcher.markSent(sid, sendText);
+        json(res, 200, {
+          ok: true,
+          sid,
+          decision: "approve",
+          status: "approved",
+          dispatched: msgRes.ok,
+          text: sendText
+        });
+        return;
+      } else if (decision === "reject" || decision === "deny") {
+        dispatcher.markSent(sid, "[REJECTED]");
+        json(res, 200, {
+          ok: true,
+          sid,
+          decision: "reject",
+          status: "rejected",
+          msg: "Action rejected by operator"
+        });
+        return;
+      } else {
+        json(res, 400, { ok: false, error: "UNKNOWN_DECISION", msg: `Unsupported decision: ${decision}` });
+        return;
+      }
     }
     if (u === "/api/diff") {
       const q = new URLSearchParams((req.url || "").split("?")[1] || "");
@@ -1429,7 +1557,7 @@ function serve(options = {}) {
       }
       try {
         const content = fs.readFileSync(st.file, "utf8");
-        const lines = content.split("\n").filter(Boolean).slice(-tailCount);
+        const lines = content.split("\n").filter(Boolean).slice(-tailCount).map(sanitizeStream);
         json(res, 200, { ok: true, sid, totalLines: lines.length, lines });
       } catch (err) {
         json(res, 500, { ok: false, msg: err.message });
@@ -1557,4 +1685,17 @@ if (require.main === module) {
   }
 }
 
-module.exports = { snapshot, classify, perf, serve, open, launchBrowser, printHelp, broadcastLogLine };
+module.exports = {
+  snapshot,
+  classify,
+  perf,
+  serve,
+  open,
+  launchBrowser,
+  printHelp,
+  broadcastLogLine,
+  sanitizeStream,
+  generateWebhookToken,
+  verifyWebhookToken,
+  coordination
+};
