@@ -1,0 +1,8 @@
+{"sessions":12,"activeWriters":8,"fileKB":2048,"totalMB":24,"stateGetMs":{"mean":21.7,"p95":38.2,"max":44},"stateKB":42.1,"serverCpuPct":10.4,"serverMemMB":139.7,"sse":{"pushes":64,"perSec":1.49,"kbPerSec":85,"logLineEvents":420},"appendToUiLatencyMs":{"n":194,"of":212,"p50":387.7,"p95":700.7,"max":1004},"pingDuringLoadMs":{"p50":1,"p95":69.6,"max":558.4}}
+
+{"sessions":25,"activeWriters":8,"fileKB":2048,"totalMB":50,"stateGetMs":{"mean":33,"p95":41.6,"max":53.8},"stateKB":87.1,"serverCpuPct":10.4,"serverMemMB":169.5,"sse":{"pushes":65,"perSec":1.5,"kbPerSec":158,"logLineEvents":412},"appendToUiLatencyMs":{"n":198,"of":206,"p50":434,"p95":759.1,"max":948.4},"pingDuringLoadMs":{"p50":1,"p95":157.9,"max":528}}
+
+{"sessions":50,"activeWriters":8,"fileKB":2048,"totalMB":100,"stateGetMs":{"mean":86.2,"p95":164.4,"max":233.9},"stateKB":173.3,"serverCpuPct":13.7,"serverMemMB":261.6,"sse":{"pushes":61,"perSec":1.42,"kbPerSec":279,"logLineEvents":426},"appendToUiLatencyMs":{"n":196,"of":214,"p50":382.3,"p95":645.4,"max":1642.1},"pingDuringLoadMs":{"p50":0.9,"p95":96.3,"max":1380.7}}
+
+{"sessions":100,"activeWriters":8,"fileKB":2048,"totalMB":200,"stateGetMs":{"mean":173,"p95":263.6,"max":275},"stateKB":342.8,"serverCpuPct":25.6,"serverMemMB":313.8,"sse":{"pushes":63,"perSec":1.47,"kbPerSec":521,"logLineEvents":426},"appendToUiLatencyMs":{"n":194,"of":213,"p50":501.2,"p95":692.7,"max":915.2},"pingDuringLoadMs":{"p50":0.9,"p95":181.1,"max":320.7}}
+

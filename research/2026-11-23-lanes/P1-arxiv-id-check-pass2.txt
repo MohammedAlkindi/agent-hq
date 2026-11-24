@@ -1,0 +1,11 @@
+Pass 2 (2026-11-24 ~01:20): ids cited in lane files after pass 1 (8 new; the other 49 are in pass 1, all resolved).
+The arXiv API returned HTTP 429 for the batch query, so each id was checked on its abstract page (https://arxiv.org/abs/<id>, HTTP 200, title and date read from the page).
+1301.6707 | 2013-01-23 | Attention-Sensitive Alerting (UAI 1999 paper)
+2506.00911 | 2025-06-01 | Conformal Arbitrage: Risk-Controlled Balancing of Competing Objectives in Language Models
+2604.09155 | 2026-04-10 | CORA: Conformal Risk-Controlled Agents for Safeguarded Mobile GUI Automation
+2605.25871 | 2026-05-25 | How Agentic AI Coding Assistants Become the Attacker's Shell
+2606.12587 | 2026-06-10 | Strategic Decision Support for AI Agents
+2607.24343 | 2026-07-27 | Beyond Aggregate Risk: Role-Stratified Conformal Risk Control for LLM Tool Calls
+2608.29685 | 2026-08-30 | Last Step Matters: Early Uncertainty Cannot Predict Failure in Long-Horizon Agents
+2609.09448 | 2026-09-08 | Do Agents Know When They Succeed? Calibrating Agent Confidence from Internal Representations
+Total checked across both passes: 57. Not found: 0. Titles match what the lane files say about each id; this check covers existence, title and date only, not the numbers each lane quotes from the paper bodies.
