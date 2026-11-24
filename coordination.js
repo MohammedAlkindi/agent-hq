@@ -6,7 +6,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { DatabaseSync } = require("node:sqlite");
 
-const STATE_DIR = path.join(__dirname, ".state");
+const STATE_DIR = process.env.AGENT_HQ_STATE_DIR || path.join(__dirname, ".state");
 const DEFAULT_DB_PATH = path.join(STATE_DIR, "coordination.db");
 
 let dbInstance = null;

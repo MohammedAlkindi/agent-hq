@@ -30,22 +30,18 @@ async function acceptAndSendDraft(s, d) {
     return;
   }
   toast(`Delivering draft to ${s.title}…`);
-  try {
-    const r = await post("/api/dispatch/send", { sid: s.id, key: d.key, reply: d.reply });
-    toast(r.msg || (r.ok ? "Delivered draft!" : "Could not deliver draft."));
-    if (r.ok) {
-      if (typeof markSeen === "function") markSeen(s, true);
-      tick();
-      if (typeof chime === "function") chime("done");
-      return;
-    }
-  } catch {}
-  // Fallback to /api/prompt if /api/dispatch/send is not available
-  const r2 = await post("/api/prompt", { target: s.id, text: d.reply });
-  toast(r2.msg || (r2.ok ? "Sent." : "Could not send."));
-  if (typeof markSeen === "function") markSeen(s, true);
+  // One route, one answer. The server decides what happened; this function never tries a second route,
+  // because a second send after an error response used to deliver the same reply twice. The idempotency
+  // key lets the server ignore a repeated click or a retry of the same draft.
+  const r = await post("/api/dispatch/send", { sid: s.id, key: d.key, reply: d.reply, idem: "draft:" + d.key });
+  toast(r.msg || (r.ok ? "Delivered draft." : "Could not deliver draft."));
+  if (r.ok) {
+    if (typeof markSeen === "function") markSeen(s, true);
+    tick();
+    if (typeof chime === "function") chime("done");
+    return;
+  }
   tick();
-  if (typeof chime === "function") chime("done");
 }
 
 async function rateDraft(key, verdict) {
@@ -93,7 +89,7 @@ function dispatchRender() {
   const p = DSP.data, host = $("#dsp");
   if (!p || !host) return;
   // redraw only when something changed, so buttons stay put under the cursor
-  const sig = JSON.stringify([p.counts, p.mode, p.policyError, p.drafts.map((d) => [d.key, d.rating, d.wouldSend, d.error ? 1 : 0])]);
+  const sig = JSON.stringify([p.counts, p.mode, p.policyError, p.offline, p.drafts.map((d) => [d.key, d.rating, d.wouldSend, d.error ? 1 : 0])]);
   if (sig === DSP.sig && host.firstChild) return;
   DSP.sig = sig;
   const c = p.counts;
@@ -121,7 +117,9 @@ function dispatchRender() {
     h("div", { class: "dsp-head" },
       h("h2", { text: "Dispatcher" }),
       h("span", { class: "mode", text: p.mode === "shadow" ? "Shadow mode: drafts and logs, never sends" : "Mode: " + p.mode }),
-      p.policyError ? h("span", { class: "dv no", text: p.policyError }) : null),
+      p.policyError ? h("span", { class: "dv no", text: p.policyError }) : null,
+      // after repeated failures the dispatcher pauses itself; say why instead of showing a list of red cards
+      p.offline ? h("span", { class: "dv no", title: "It tries again on its own after the pause.", text: `Dispatcher offline: ${p.offline.reason} (until ${clock(p.offline.until)})` }) : null),
     h("p", { class: "note", text: "Every time a session stops to wait on you, the dispatcher labels why and drafts the reply you would most likely send. It also records whether your standing rules would have let it send that reply on its own. Rate drafts with 👍 or 👎: the bottom number decides whether automatic replies are ever switched on." }),
     h("div", { class: "kpis" },
       tile("Drafts today", String(c.today), c.queued ? `${c.queued} drafting now` : "one per waiting turn"),

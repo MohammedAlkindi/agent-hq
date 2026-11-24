@@ -114,28 +114,57 @@ function sanitizeStream(text) {
     .replace(/(["']?(?:api[_-]?key|secret|access[_-]?token|bearer)["']?\s*[:=]\s*["'])([^"'\s]{8,})(["'])/gi, "$1[REDACTED]$3");
 }
 
-const WEBHOOK_SECRET = process.env.AGENT_DISPATCH_WEBHOOK_SECRET || "agent-hq-dispatch-secret-2026";
+// Secrets live in files under .state/ (ignored by git), created on first use with a random value. There is no
+// built-in default: the old default string was public in this repository, so anyone could forge an approval.
+const STATE_DIR = process.env.AGENT_HQ_STATE_DIR || path.join(__dirname, ".state");
+function persistedSecret(name) {
+  const file = path.join(STATE_DIR, name);
+  try { const s = fs.readFileSync(file, "utf8").trim(); if (s) return s; } catch {}
+  const fresh = crypto.randomBytes(32).toString("hex");
+  try {
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+    fs.writeFileSync(file, fresh, { flag: "wx", mode: 0o600 });
+    return fresh;
+  } catch {
+    try { const s = fs.readFileSync(file, "utf8").trim(); if (s) return s; } catch {} // another process created it first
+    return fresh; // read-only folder: valid for this process only
+  }
+}
+const webhookSecret = () => process.env.AGENT_DISPATCH_WEBHOOK_SECRET || persistedSecret("webhook-secret");
+// A token for scripts and hooks on this machine that call the control API. Browsers cannot read the file, and
+// a cross-site page cannot send the header without a preflight that this server never answers.
+const localApiToken = () => persistedSecret("local-api-token");
 
-function generateWebhookToken(sid, decision, secret = WEBHOOK_SECRET) {
+const WEBHOOK_TTL = 15 * 60e3;
+const hmacHex = (secret, data) => crypto.createHmac("sha256", secret).update(data).digest("hex");
+
+// token = "<expiry ms>.<hmac of sid:decision:expiry>". It is bound to one session, one decision and an expiry
+// (15 minutes by default). The old token had no expiry and a second accepted form, HMAC(sid), approved or
+// rejected anything for that session.
+function generateWebhookToken(sid, decision, secret = webhookSecret(), ttlMs = WEBHOOK_TTL, now = Date.now()) {
   const d = String(decision || "").trim().toLowerCase();
-  return crypto.createHmac("sha256", secret).update(`${sid}:${d}`).digest("hex");
+  const exp = now + ttlMs;
+  return exp + "." + hmacHex(secret, sid + ":" + d + ":" + exp);
 }
 
-function verifyWebhookToken(token, sid, decision, secret = WEBHOOK_SECRET) {
+function verifyWebhookToken(token, sid, decision, secret = webhookSecret(), now = Date.now()) {
   if (!token || !sid) return false;
-  const t = String(token).trim().toLowerCase();
+  const m = /^(\d{10,16})\.([0-9a-f]{64})$/.exec(String(token).trim().toLowerCase());
+  if (!m) return false;
+  if (Number(m[1]) < now) return false; // expired
   const d = String(decision || "").trim().toLowerCase();
-  const expected1 = crypto.createHmac("sha256", secret).update(`${sid}:${d}`).digest("hex").toLowerCase();
-  const expected2 = crypto.createHmac("sha256", secret).update(sid).digest("hex").toLowerCase();
-  try {
-    const tBuf = Buffer.from(t);
-    const e1Buf = Buffer.from(expected1);
-    const e2Buf = Buffer.from(expected2);
-    return (tBuf.length === e1Buf.length && crypto.timingSafeEqual(tBuf, e1Buf)) ||
-           (tBuf.length === e2Buf.length && crypto.timingSafeEqual(tBuf, e2Buf));
-  } catch {
-    return false;
-  }
+  const a = Buffer.from(m[2]), b = Buffer.from(hmacHex(secret, sid + ":" + d + ":" + m[1]));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+// Each token works once, so a leaked link cannot be replayed after the real use.
+const usedWebhookTokens = new Map(); // token -> expiry
+function consumeWebhookToken(token) {
+  const now = Date.now();
+  for (const [k, exp] of usedWebhookTokens) if (exp < now) usedWebhookTokens.delete(k);
+  if (usedWebhookTokens.has(token)) return false;
+  usedWebhookTokens.set(token, Number(String(token).split(".")[0]) || now + WEBHOOK_TTL);
+  return true;
 }
 
 // What a user-role transcript entry is. Peer messages, notices and app events are not tasks.
@@ -560,7 +589,8 @@ const QUEUE_FILE = path.join(CLAUDE, "state", "agents-queue.json");
 function claudeRun(args, opts = {}) {
   return new Promise((resolve) => {
     cp.execFile(CLAUDE_EXE, args, { windowsHide: true, timeout: opts.timeout || 60e3, cwd: opts.cwd || HOME, maxBuffer: 4 * 1024 * 1024 },
-      (err, stdout, stderr) => resolve({ ok: !err, out: String(stdout || "") + String(stderr || ""), err: err ? err.message : "" }));
+      // timedOut: the child was killed by our timeout, so we do not know whether it did its work
+      (err, stdout, stderr) => resolve({ ok: !err, timedOut: !!(err && err.killed), out: String(stdout || "") + String(stderr || ""), err: err ? err.message : "" }));
   });
 }
 const firstLine = (s) => one(String(s || "").split(/\r?\n/).find((l) => l.trim() && !/^Starting background/.test(l)) || "", 200);
@@ -585,6 +615,11 @@ const rosterFresh = () => roster.ok && Date.now() - roster.at < 30e3;
 let queue = [];   // follow-ups waiting for a busy background agent to finish its turn
 let radio = [];   // recent prompt-box actions, newest first
 try { queue = JSON.parse(fs.readFileSync(QUEUE_FILE, "utf8")).filter((q) => q && q.sid && q.text); } catch {}
+// An entry still marked "sending" was cut off mid-delivery by a crash or exit: whether it went out is unknown.
+for (const q of queue) {
+  if (!q.id) q.id = crypto.randomUUID();
+  q.status = q.status === "sending" || q.status === "unknown" ? "unknown" : "queued";
+}
 function saveQueue() {
   try {
     fs.mkdirSync(path.dirname(QUEUE_FILE), { recursive: true });
@@ -663,19 +698,36 @@ async function startAgent(text, cwd, model, harness = "claude", options = {}) {
   return res;
 }
 
+// Result of a delivery attempt:
+//   { ok: true }                      the CLI confirmed it started the session with the message
+//   { ok: false, retry: true }        nothing was sent and trying again later is safe (agent busy, stop failed)
+//   { ok: false, unknown: true }      the CLI may have acted but did not confirm; NEVER retried automatically,
+//                                     because a retry could deliver the message twice
+//   { ok: false }                     definitive failure, nothing was sent
 async function deliver(sid, text) {
   const adapter = adapters.findAdapterForSession(sid);
   if (adapter && adapter.name !== "claude") {
     return await adapter.deliver(sid, text);
   }
+  // Decide from a roster read taken now: a row up to 4 s old can say "idle" about an agent that has
+  // just started a turn, and `claude stop` would then kill that turn.
+  await refreshRoster(Date.now(), true);
   const r = roster.rows.get(sid);
   if (!r || r.kind !== "background") return { ok: false, msg: "That agent is not a background agent." };
-  if (r.pid) await claudeRun(["stop", r.id], { timeout: 30e3 });
+  const label = r.name || r.id;
+  if (r.state === "working") return { ok: false, retry: true, busy: true, msg: `"${label}" is working on a turn; the message waits until it ends` };
+  if (r.pid) {
+    const stopped = await claudeRun(["stop", r.id], { timeout: 30e3 });
+    if (!stopped.ok) return { ok: false, retry: !stopped.timedOut, unknown: stopped.timedOut, msg: `Could not stop "${label}" before resuming it: ${firstLine(stopped.out) || stopped.err}` };
+  }
   const cwd = r.cwd && fs.existsSync(r.cwd) ? r.cwd : HOME;
   const res = await claudeRun(["--bg", "--resume", sid, "--", text], { cwd });
   refreshRoster(Date.now(), true);
-  const ok = res.ok && /backgrounded/.test(res.out);
-  return { ok, msg: ok ? `Sent to "${r.name || r.id}"` : `Could not reach "${r.name || r.id}": ${firstLine(res.out) || res.err}` };
+  if (res.ok && /backgrounded/.test(res.out)) return { ok: true, msg: `Sent to "${label}"` };
+  // The command ran (exit 0) without the confirmation line, or it was killed by the timeout: the session
+  // may have been resumed with the message. Report that honestly instead of calling it a failure.
+  if (res.ok || res.timedOut) return { ok: false, unknown: true, msg: `Not confirmed: "${label}" may or may not have received the message. Check the session before sending it again.` };
+  return { ok: false, msg: `Could not reach "${label}": ${firstLine(res.out) || res.err}` };
 }
 
 // A session with no process (it went home) can be woken: `claude --bg --resume <id> -- msg`
@@ -685,7 +737,9 @@ async function wake(sid, text) {
   if (adapter && adapter.name !== "claude") {
     return await adapter.deliver(sid, text);
   }
-  const st = [...S.values()].find((x) => x.id === sid);
+  // Transcript state lives in the adapters. This file's own `S` map is never filled (the parser moved to
+  // adapters/claude.js), so looking sessions up there always failed.
+  const st = [...adapters.getAllStates().values()].find((x) => x.id === sid);
   if (!st) return { ok: false, msg: "That session is not in the last day's transcripts." };
   if (!rosterFresh() || roster.rows.has(sid)) return { ok: false, msg: "That session is still running, so it cannot be woken." };
   const cwd = st.cwd && fs.existsSync(st.cwd) ? st.cwd : HOME;
@@ -693,12 +747,15 @@ async function wake(sid, text) {
   refreshRoster(Date.now(), true);
   listedAt = 0; relistUntil = Date.now() + 60e3;
   const ok = res.ok && /backgrounded/.test(res.out);
-  const msg = ok ? `Woke "${titleOfSt(st)}" as a background agent with your message` : `Could not wake "${titleOfSt(st)}": ${firstLine(res.out) || res.err}`;
+  const unknown = !ok && (res.ok || res.timedOut);
+  const msg = ok ? `Woke "${titleOfSt(st)}" as a background agent with your message`
+    : unknown ? `Not confirmed: "${titleOfSt(st)}" may or may not have woken with your message. Check it before sending again.`
+    : `Could not wake "${titleOfSt(st)}": ${firstLine(res.out) || res.err}`;
   say(msg, ok);
-  return { ok, msg };
+  return { ok, unknown, msg };
 }
 
-async function message(sid, text) {
+async function messageOnce(sid, text) {
   const adapter = adapters.findAdapterForSession(sid);
   if (adapter && adapter.name !== "claude") {
     const res = await adapter.deliver(sid, text);
@@ -708,33 +765,62 @@ async function message(sid, text) {
   const r = roster.rows.get(sid);
   if (!r && rosterFresh()) return wake(sid, text);
   if (!r || r.kind !== "background") return { ok: false, msg: "Desktop sessions take messages only inside the Claude app." };
-  if (r.state === "working") {
-    queue.push({ sid, name: r.name || r.id, text, at: Date.now() });
+  const enqueue = () => {
+    queue.push({ id: crypto.randomUUID(), sid, name: r.name || r.id, text, at: Date.now(), status: "queued", attempts: 0 });
     saveQueue();
     const msg = `"${r.name || r.id}" is busy; your message goes in when its turn ends`;
     say(msg);
     return { ok: true, msg, queued: true };
-  }
+  };
+  if (r.state === "working") return enqueue();
   const res = await deliver(sid, text);
+  // deliver() re-reads the roster just before acting; if the agent started a turn in the meantime, wait for it
+  if (res.busy) return enqueue();
   say(res.msg, res.ok);
   return res;
 }
 
+// A send is identified by an idempotency key. A second request with the same key (a double click, or a client
+// retry after an error response) gets the first result back and sends nothing. Only a definite failure frees
+// the key, because a failure that may have delivered ("unknown") must not be repeated blindly.
+const sendLog = new Map(); // idem -> { at, p }
+function message(sid, text, idem) {
+  if (!idem) return messageOnce(sid, text);
+  const now = Date.now();
+  for (const [k, v] of sendLog) if (now - v.at > 10 * MIN) sendLog.delete(k);
+  const prev = sendLog.get(idem);
+  if (prev) return prev.p.then((res) => ({ ...res, duplicate: true }));
+  const p = messageOnce(sid, text);
+  sendLog.set(idem, { at: now, p });
+  p.then((res) => { if (!res.ok && !res.unknown) sendLog.delete(idem); }, () => sendLog.delete(idem));
+  return p;
+}
+
+// Queue entries move queued -> sending -> removed (delivered). An entry is persisted as "sending" before the
+// CLI is called, so a crash in between leaves "unknown" on disk: it is shown, never re-sent automatically.
+const QUEUE_TRIES = 3;
 let draining = false;
 async function drainQueue() {
   if (draining || !queue.length) return;
   draining = true;
+  const drop = (q) => { queue = queue.filter((x) => x !== q); saveQueue(); };
   try {
     await refreshRoster(Date.now(), true);
     for (const q of [...queue]) {
+      const now = Date.now();
+      if (q.status === "unknown") { if (now - q.at > DAY) drop(q); continue; }
+      if (q.notBefore && now < q.notBefore) continue;
       const r = roster.rows.get(q.sid);
-      const stale = Date.now() - q.at > 6 * HOUR;
+      const stale = now - q.at > 6 * HOUR;
       if (!stale && r && r.state === "working") continue;
-      queue = queue.filter((x) => x !== q);
-      saveQueue();
-      if (stale || !r) { say(`Dropped a waiting message for "${q.name}": ${stale ? "it waited 6 hours" : "the agent is gone"}`, false); continue; }
+      if (stale || !r) { drop(q); say(`Dropped a waiting message for "${q.name}": ${stale ? "it waited 6 hours" : "the agent is gone"}`, false); continue; }
+      q.status = "sending"; q.attempts = (q.attempts || 0) + 1; saveQueue();
       const res = await deliver(q.sid, q.text);
-      say(res.ok ? `Delivered your waiting message to "${q.name}"` : res.msg, res.ok);
+      if (res.ok) { drop(q); say(`Delivered your waiting message to "${q.name}"`, true); continue; }
+      if (res.unknown) { q.status = "unknown"; saveQueue(); say(res.msg, false); continue; }
+      if (res.busy) q.attempts--; // the agent started a turn meanwhile; waiting is not a failed try
+      if (q.attempts >= QUEUE_TRIES) { drop(q); say(`Gave up on a waiting message for "${q.name}" after ${QUEUE_TRIES} tries: ${res.msg}`, false); continue; }
+      q.status = "queued"; q.notBefore = Date.now() + 10e3 * Math.max(1, q.attempts); saveQueue();
     }
   } finally { draining = false; }
 }
@@ -781,6 +867,14 @@ function readBoard() {
     if (!f.endsWith(".json")) continue;
     try { const e = JSON.parse(fs.readFileSync(path.join(BOARD, f), "utf8")); if (e.id) out.set(e.id, e); } catch {}
   }
+  return out;
+}
+
+// Folders where a session was active in the last 12 hours. Cleanup, prune and merge refuse to remove a
+// worktree that any of them is inside: the session would lose its working directory.
+function liveCwds() {
+  const now = Date.now(), out = [];
+  for (const st of adapters.getAllStates().values()) if (st.cwd && now - (st.mtime || 0) < 12 * HOUR) out.push(st.cwd);
   return out;
 }
 
@@ -862,7 +956,7 @@ function snapshot() {
 
   // Shadow dispatcher: draft a reply for each waiting turn, and attach the current draft.
   try {
-    dispatcher.consider(sessions, (id) => { const st = byId.get(id); return st ? { prompt: st.promptFull || st.prompt, reply: st.text, ask: st.asking ? st.askInput : null } : null; }, now);
+    dispatcher.consider(sessions, (id) => { const st = byId.get(id); return st ? { prompt: st.promptFull || st.prompt, reply: st.text, ask: st.asking ? st.askInput : null, promptAt: st.promptAt } : null; }, now);
     for (const s of sessions) {
       const d = dispatcher.draftFor(s);
       if (d) s.draft = d.pending ? { pending: true } : { key: d.key, label: d.label, why: d.why, reply: d.reply, action: d.action, needsHuman: d.needsHuman,
@@ -939,7 +1033,7 @@ function snapshot() {
     tasks: { app: tasks, win: winTasks.rows, winAt: winTasks.at, winErr: winTasks.err },
     worktrees: wts,
     folders: folders.map((p) => ({ path: p, label: short(p) })),
-    queue: queue.map((q) => ({ name: q.name, sid: q.sid, at: q.at, text: one(q.text, 120) })),
+    queue: queue.map((q) => ({ name: q.name, sid: q.sid, at: q.at, text: one(q.text, 120), status: q.status || "queued" })),
     radio: radio.slice(0, 8),
   };
 }
@@ -1242,6 +1336,37 @@ function readBody(req, max) {
 
 let broadcastLogLine = () => {};
 
+// POST /api/dispatch/webhook-approve: the only place a signed link acts. Needs a valid, unexpired, unused token
+// for this session and decision, and the draft the link was made for.
+async function webhookDecide(req, res) {
+  const send = (code, obj) => { res.writeHead(code, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(obj)); };
+  if (req.headers.origin && !new RegExp(`^http://(127\\.0\\.0\\.1|localhost):${PORT}$`, "i").test(req.headers.origin)) { send(403, { ok: false, error: "BAD_ORIGIN", msg: "Cross-site request refused." }); return; }
+  let raw = "";
+  try { raw = await readBody(req, 16 * 1024); } catch { send(400, { ok: false, msg: "Bad request." }); return; }
+  let b = {};
+  try { b = /^\s*\{/.test(raw) ? JSON.parse(raw) : Object.fromEntries(new URLSearchParams(raw)); } catch { send(400, { ok: false, msg: "Bad request." }); return; }
+  const token = String(b.token || "").trim(), sid = String(b.sid || "").trim(), key = String(b.key || "").trim();
+  const decision = String(b.decision || "approve").trim().toLowerCase();
+  if (!token || !sid) { send(400, { ok: false, error: "MISSING_PARAMETERS", msg: "token and sid are required" }); return; }
+  if (!["approve", "accept", "reject", "deny"].includes(decision)) { send(400, { ok: false, error: "UNKNOWN_DECISION", msg: `Unsupported decision: ${decision}` }); return; }
+  if (!verifyWebhookToken(token, sid, decision)) { send(403, { ok: false, error: "INVALID_SIGNATURE", msg: "Invalid or expired link." }); return; }
+  if (!consumeWebhookToken(token)) { send(403, { ok: false, error: "ALREADY_USED", msg: "This link was already used." }); return; }
+  const draft = key ? dispatcher.getDraft(key) : null;
+  if (!draft || draft.id !== sid) { send(404, { ok: false, error: "NO_DRAFT", msg: "The draft this link was made for is gone. Nothing was sent." }); return; }
+  if (decision === "reject" || decision === "deny") {
+    dispatcher.markSent(draft.key, "[REJECTED]");
+    send(200, { ok: true, sid, decision: "reject", status: "rejected", msg: "Draft rejected." });
+    return;
+  }
+  if (draft.sent) { send(200, { ok: true, sid, decision: "approve", status: "already_sent", dispatched: false, msg: "Already sent." }); return; }
+  const sendText = String(draft.reply || "").trim();
+  if (!sendText) { send(404, { ok: false, error: "NO_TEXT", msg: "That draft has no reply text. Nothing was sent." }); return; }
+  let r;
+  try { r = await message(sid, sendText, "draft:" + draft.key); } catch (e) { r = { ok: false, msg: String(e && e.message || e) }; }
+  if (r.ok) dispatcher.markSent(draft.key, sendText);
+  send(200, { ok: true, sid, decision: "approve", status: r.ok ? "approved" : "not_delivered", dispatched: !!r.ok, msg: r.msg || "" });
+}
+
 function serve(options = {}) {
   let lastHit = Date.now();
   // Control endpoints need the per-run token from the page and a same-origin request. A custom
@@ -1336,9 +1461,13 @@ function serve(options = {}) {
     if (u === "/api/ping") { res.writeHead(200, { "content-type": "text/plain" }); res.end("ok"); return; }
     lastHit = Date.now();
 
+    if (req.method === "POST" && u === "/api/dispatch/webhook-approve") { await webhookDecide(req, res); return; }
+
     if (req.method === "POST" && u.startsWith("/api/")) {
-      const isCoordination = u.startsWith("/api/leases/") || u === "/api/intent/broadcast";
-      if (!isCoordination && (req.headers["x-agents-token"] !== TOKEN || (req.headers.origin && !okOrigin.test(req.headers.origin)))) {
+      // Lease and intent routes used to skip this check, so any web page could reach them. The only extra
+      // accepted token is the local one in .state/local-api-token, for hooks and scripts on this machine.
+      const sent = req.headers["x-agents-token"];
+      if (!(sent === TOKEN || (sent && sent === localApiToken())) || (req.headers.origin && !okOrigin.test(req.headers.origin))) {
         json(res, 403, { ok: false, msg: "Refused: reload the page." }); return;
       }
       let body;
@@ -1370,7 +1499,7 @@ function serve(options = {}) {
             const success = out.filter((o) => o.ok).length;
             json(res, 200, { ok: success > 0, msg: `Broadcast sent to ${success} of ${total} active background agents.` }); return;
           }
-          json(res, 200, await message(String(body.target || ""), text)); return;
+          json(res, 200, await message(String(body.target || ""), text, String(body.idem || "").trim())); return;
         }
         if (u === "/api/stop") { json(res, 200, await stopAgent(String(body.target || ""))); return; }
         if (u === "/api/attach") { json(res, 200, attachAgent(String(body.target || ""))); return; }
@@ -1380,14 +1509,20 @@ function serve(options = {}) {
           const key = String(body.key || "").trim();
           const draft = dispatcher.getDraft(key);
           const sid = String(body.sid || (draft && draft.id) || "").trim();
-          const sendText = String(body.text || (draft && draft.reply) || "").trim();
+          const sendText = String(body.text || body.reply || (draft && draft.reply) || "").trim();
           if (!sid) { json(res, 400, { ok: false, msg: "Session ID is required." }); return; }
           if (!sendText) { json(res, 400, { ok: false, msg: "No message text to send." }); return; }
-          const resDeliver = await message(sid, sendText);
-          if (resDeliver.ok && key) {
-            dispatcher.markSent(key, sendText);
+          // One draft is sent once, however many times the button is pressed or the request is repeated.
+          const draftKey = draft && draft.key ? draft.key : "";
+          if (draftKey && draft.sent && String(draft.sentText || draft.reply || "") === sendText) {
+            json(res, 200, { ok: true, duplicate: true, msg: "Already sent.", sid, sentText: sendText }); return;
           }
-          json(res, 200, { ok: resDeliver.ok, msg: resDeliver.msg, sid, sentText });
+          const idem = String(body.idem || "").trim() || (draftKey ? `draft:${draftKey}` : "");
+          const resDeliver = await message(sid, sendText, idem);
+          // A queued message counts as handed over; an unconfirmed one is reported as such and not marked sent.
+          if (resDeliver.ok && !resDeliver.duplicate && draftKey) dispatcher.markSent(draftKey, sendText);
+          json(res, 200, { ok: resDeliver.ok, queued: !!resDeliver.queued, unknown: !!resDeliver.unknown, duplicate: !!resDeliver.duplicate,
+            msg: resDeliver.msg, sid, sentText: sendText });
           return;
         }
         if (u === "/api/worktree/create") {
@@ -1396,17 +1531,17 @@ function serve(options = {}) {
           return;
         }
         if (u === "/api/worktree/merge") {
-          const out = await worktrees.mergeWorktree(body);
+          const out = await worktrees.mergeWorktree({ ...body, protect: liveCwds() });
           json(res, out.ok ? 200 : 400, out);
           return;
         }
         if (u === "/api/worktree/cleanup") {
-          const out = await worktrees.cleanupWorktree(body);
+          const out = await worktrees.cleanupWorktree({ ...body, protect: liveCwds() });
           json(res, out.ok ? 200 : 400, out);
           return;
         }
         if (u === "/api/worktree/prune") {
-          const out = await worktrees.pruneInactiveWorktrees(body);
+          const out = await worktrees.pruneInactiveWorktrees({ ...body, protect: liveCwds() });
           json(res, out.ok ? 200 : 400, out);
           return;
         }
@@ -1469,14 +1604,6 @@ function serve(options = {}) {
       }
       return;
     }
-    if (u === "/api/stream/broadcast" || u === "/api/logs/emit") {
-      const q = new URLSearchParams((req.url || "").split("?")[1] || "");
-      const sid = String(q.get("sid") || "test-sid").trim();
-      const text = sanitizeStream(String(q.get("text") || "Live terminal log line").trim());
-      broadcastLogLine(sid, text);
-      json(res, 200, { ok: true, broadcast: true, sid, text });
-      return;
-    }
     if (u === "/api/leases/active") {
       const q = new URLSearchParams((req.url || "").split("?")[1] || "");
       const sid = q.get("sid") || q.get("sessionId") || null;
@@ -1485,54 +1612,27 @@ function serve(options = {}) {
       return;
     }
     if (u === "/api/dispatch/webhook-approve") {
+      // A GET changes nothing. Link previews and prefetchers open links, so the link only shows a page with a
+      // button; the button POSTs the same signed token, and that is what acts.
       const q = new URLSearchParams((req.url || "").split("?")[1] || "");
       const token = String(q.get("token") || q.get("sig") || "").trim();
       const sid = String(q.get("sid") || "").trim();
       const decision = String(q.get("decision") || "approve").trim().toLowerCase();
-
-      if (!token || !sid) {
-        json(res, 400, { ok: false, error: "MISSING_PARAMETERS", msg: "token and sid query parameters are required" });
-        return;
-      }
-
-      if (!verifyWebhookToken(token, sid, decision)) {
-        json(res, 403, { ok: false, error: "INVALID_SIGNATURE", msg: "HMAC signature verification failed" });
-        return;
-      }
-
-      if (decision === "approve" || decision === "accept") {
-        const draft = dispatcher.getDraft(sid);
-        let sendText = draft && draft.reply ? draft.reply : "Approved";
-        let msgRes = { ok: true };
-        try {
-          msgRes = await message(sid, sendText);
-        } catch (e) {
-          msgRes = { ok: false, msg: e.message };
-        }
-        dispatcher.markSent(sid, sendText);
-        json(res, 200, {
-          ok: true,
-          sid,
-          decision: "approve",
-          status: "approved",
-          dispatched: msgRes.ok,
-          text: sendText
-        });
-        return;
-      } else if (decision === "reject" || decision === "deny") {
-        dispatcher.markSent(sid, "[REJECTED]");
-        json(res, 200, {
-          ok: true,
-          sid,
-          decision: "reject",
-          status: "rejected",
-          msg: "Action rejected by operator"
-        });
-        return;
-      } else {
-        json(res, 400, { ok: false, error: "UNKNOWN_DECISION", msg: `Unsupported decision: ${decision}` });
-        return;
-      }
+      const key = String(q.get("key") || "").trim();
+      if (!token || !sid) { json(res, 400, { ok: false, error: "MISSING_PARAMETERS", msg: "token and sid query parameters are required" }); return; }
+      if (!verifyWebhookToken(token, sid, decision)) { json(res, 403, { ok: false, error: "INVALID_SIGNATURE", msg: "Invalid or expired link." }); return; }
+      const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      const draft = key ? dispatcher.getDraft(key) : null;
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store",
+        "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'" });
+      res.end(`<!doctype html><meta charset="utf-8"><title>Agent HQ</title><body style="font:16px system-ui;max-width:34em;margin:3em auto">
+<h2>${decision === "reject" ? "Reject" : "Approve"} this reply?</h2>
+${draft && draft.reply ? "<p>Reply to send:</p><pre style='white-space:pre-wrap'>" + esc(draft.reply) + "</pre>" : "<p>No draft was found for this link.</p>"}
+<form method="post" action="/api/dispatch/webhook-approve">
+<input type="hidden" name="token" value="${esc(token)}"><input type="hidden" name="sid" value="${esc(sid)}">
+<input type="hidden" name="decision" value="${esc(decision)}"><input type="hidden" name="key" value="${esc(key)}">
+<button type="submit">${decision === "reject" ? "Reject" : "Send it"}</button></form></body>`);
+      return;
     }
     if (u === "/api/diff") {
       const q = new URLSearchParams((req.url || "").split("?")[1] || "");
@@ -1618,7 +1718,7 @@ function serve(options = {}) {
   // Stay up while a message waits for its agent, even with the page closed.
   setInterval(() => {
     if (streams.size) lastHit = Date.now(); // an open page counts as watching
-    if (Date.now() - lastHit > IDLE_EXIT && !queue.length) process.exit(0);
+    if (Date.now() - lastHit > IDLE_EXIT && !queue.some((q) => q.status !== "unknown")) process.exit(0);
   }, 60e3).unref();
   return srv;
 }

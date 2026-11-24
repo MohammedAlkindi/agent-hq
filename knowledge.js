@@ -3,7 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const DEFAULT_KNOWLEDGE_DIR = path.join(__dirname, ".hq", "knowledge");
+const DEFAULT_KNOWLEDGE_DIR = process.env.AGENT_HQ_KNOWLEDGE_DIR || path.join(__dirname, ".hq", "knowledge");
 
 function ensureKnowledgeDir(dir = DEFAULT_KNOWLEDGE_DIR) {
   if (!fs.existsSync(dir)) {

@@ -17,6 +17,7 @@ const {
   pruneMetrics,
   BaseAdapter,
 } = require("./base");
+const detectors = require("../detectors");
 
 const CLAUDE_DIR = path.join(HOME, ".claude");
 const PROJ_DIR = path.join(CLAUDE_DIR, "projects");
@@ -312,6 +313,7 @@ class ClaudeAdapter extends BaseAdapter {
       outs: [],
       promptFull: "",
       askInput: null,
+      recent: [], // finished tool calls since the last human prompt, for detectors.detect
     };
   }
 
@@ -345,6 +347,9 @@ class ClaudeAdapter extends BaseAdapter {
           if (!p) continue;
           st.pending.delete(x.tool_use_id);
           toolStat(st, p.name).done.push([at, Math.max(0, at - p.at), x.is_error ? 1 : 0]);
+          const resultText = errText(x).slice(0, 160);
+          st.recent.push({ name: p.name, hash: p.hash, ok: !x.is_error, err: x.is_error ? detectors.hashOf(resultText) : "", out: x.is_error ? "" : detectors.hashOf(resultText), poll: p.poll });
+          if (st.recent.length > detectors.WINDOW) st.recent.shift();
           if (x.is_error) {
             st.errLog.push({ at, tool: p.name, text: errText(x) });
             if (st.errLog.length > 60) st.errLog.shift();
@@ -383,6 +388,7 @@ class ClaudeAdapter extends BaseAdapter {
         st.askInput = null;
         st.promptAt = at;
         st.asking = 0;
+        st.recent = []; // a new instruction starts a new run of calls; repeats are counted within one turn
       }
       if (cl.kind === "interrupt") {
         st.last = { k: "done", at };
@@ -435,7 +441,7 @@ class ClaudeAdapter extends BaseAdapter {
         usedTool = true;
         const tn = toolName(c.name);
         if (c.id && !st.pending.has(c.id)) {
-          st.pending.set(c.id, { name: tn, at, out: outputOf(tn, c.input) });
+          st.pending.set(c.id, { name: tn, at, out: outputOf(tn, c.input), hash: detectors.hashOf(JSON.stringify(c.input || {})), poll: detectors.isPoll(tn, c.input) });
           toolStat(st, tn).uses.push(at);
         }
         st.tool = { name: tn, what: toolWhat(c), at };
@@ -717,6 +723,9 @@ class ClaudeAdapter extends BaseAdapter {
         now - Math.max(L.at, st.mtime) > 8 * MIN
           ? { tool: st.tool.name, what: st.tool.what, ms: now - L.at }
           : null;
+      // A repeated call or failure within the current turn (detectors.js). Advisory only: it labels, it never acts.
+      // Only while the turn is still running or quiet: a finished turn is the human's move, not a loop to break.
+      const loop = state === "working" || state === "quiet" ? detectors.detect(st.recent) : null;
       const closedAt = state === "working" ? 0 : st.mtime;
       const tools = [...st.tools.entries()]
         .map(([name, t]) => ({
@@ -761,6 +770,7 @@ class ClaudeAdapter extends BaseAdapter {
           del,
         },
         stuck,
+        loop,
         errLog: st.errLog.slice(-6).reverse(),
         tl: st.turns
           .filter((t) => !t.e || now - t.e < 12 * HOUR)
@@ -849,6 +859,7 @@ class ClaudeAdapter extends BaseAdapter {
             del: 0,
           },
           stuck: null,
+          loop: null,
           errLog: [],
           tl: blockedOld ? [] : [[r.startedAt || now, 0]],
           errAt: [],

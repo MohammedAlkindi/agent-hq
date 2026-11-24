@@ -1305,7 +1305,7 @@ function agentEl(s, now, hue, park, conflicted) {
     pe.title = pr ? PROP_TIP[pr] : "";
   }
   let gauge = el.querySelector(".desk-gauge");
-  const isLoop = (s.errors10m >= 3) || !!s.loopThrashing || (s.errLog && s.errLog.length >= 3);
+  const isLoop = !!(s.loop && s.loop.severity === "alarm"); // repeated call or failure in this turn (detectors.js)
   if (!park) {
     const newGauge = renderDeskGauge(s, now);
     if (isLoop) newGauge.classList.add("desk-loop-alert");

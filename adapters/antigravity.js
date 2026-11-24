@@ -629,12 +629,15 @@ class AntigravityAdapter extends BaseAdapter {
     };
   }
 
+  // No working channel into an Antigravity session yet (its hooks and `agy` headless mode are the candidates).
+  // These used to answer "Message queued" and "marked stopped" while doing nothing.
   async deliver(sid, text) {
     const st = [...this.S.values()].find((x) => x.id === sid);
     if (!st) return { ok: false, msg: `Antigravity session "${sid}" not found.` };
     return {
-      ok: true,
-      msg: `Message queued for Antigravity agent "${st.title || sid.slice(0, 8)}"`,
+      ok: false,
+      unsupported: true,
+      msg: `Agent HQ cannot send messages to Antigravity sessions yet. Paste it into "${st.title || sid.slice(0, 8)}" yourself.`,
     };
   }
 
@@ -642,8 +645,9 @@ class AntigravityAdapter extends BaseAdapter {
     const st = [...this.S.values()].find((x) => x.id === sid);
     if (!st) return { ok: false, msg: `Antigravity session "${sid}" not found.` };
     return {
-      ok: true,
-      msg: `Antigravity session "${st.title || sid.slice(0, 8)}" marked stopped.`,
+      ok: false,
+      unsupported: true,
+      msg: "Agent HQ cannot stop Antigravity sessions yet. Stop it in Antigravity.",
     };
   }
 }

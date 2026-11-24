@@ -393,12 +393,15 @@ class CodexAdapter extends BaseAdapter {
     }
   }
 
+  // Agent HQ has no working channel into a Codex session yet (the supported ones are `codex app-server` and
+  // hooks). These used to return ok: true without doing anything, so the UI reported messages as sent that
+  // never were. Say so instead, and let the caller show the text for pasting.
   async deliver(sid, text) {
-    return { ok: true, msg: `Sent to Codex agent "${sid.slice(0, 8)}"` };
+    return { ok: false, unsupported: true, msg: "Agent HQ cannot send messages to Codex sessions yet. Paste it into Codex yourself." };
   }
 
   async stop(sid) {
-    return { ok: true, msg: `Stopped Codex agent "${sid.slice(0, 8)}"` };
+    return { ok: false, unsupported: true, msg: "Agent HQ cannot stop Codex sessions yet. Stop it in Codex." };
   }
 }
 

@@ -40,6 +40,10 @@ Per-lane source lists with URLs, commit SHAs and file paths are in the lane file
 
 Report section 8 (14 rejected ideas, 22 claim verdicts, 10 open questions).
 
+## Follow-up work
+
+2026-11-24: on his go-ahead, Q1 to Q5 were implemented in a worktree and merged to local main in the commit titled "fix: week 1 fixes ..." (248 checks pass; reproductions rerun; see lanes/P5-week1-fixes.md). Not pushed.
+
 ## Stop reason
 
 Runtime limit (usage quota) after about 1.6 of 3 active hours; see Budget and clock.

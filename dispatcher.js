@@ -68,20 +68,91 @@ function eligible(s, now, pol) {
   return true;
 }
 
+// ---------------------------------------------------------------- failures and the offline breaker
+// A headless `claude -p` call can fail without ever reaching the model (not logged in, usage limit). Over 65 hours
+// 209 of 237 attempts did exactly that, and each failure was stored as a finished draft: it used up the day's
+// budget, was never retried, and its cause was cut off at 300 characters. Now: failures keep the whole message,
+// do not count toward the budget, are retried with backoff, and three in a row switch the dispatcher "offline"
+// for 15 minutes so it stops hammering a CLI that cannot answer.
+const MAX_TRIES = 3;
+const FAIL_LIMIT = 3, OFFLINE_MS = 15 * 60e3;
+let consecutiveFailures = 0, offlineUntil = 0, offlineReason = "";
+const backoffMs = (tries) => Math.min(30 * 60e3, 60e3 * 2 ** Math.max(0, tries - 1)); // 1 min, 2, 4 ...
+
+function failureKind(r, j) {
+  const text = [j && j.result, r.err, r.out].filter(Boolean).join(" ").slice(0, 2000);
+  if (/not logged in|\/login|invalid api key|authentication/i.test(text)) return "auth";
+  if (/usage limit|rate limit|limit reached|quota|too many requests|overloaded/i.test(text)) return "limit";
+  return "failed";
+}
+function describeFailure(r, j) {
+  const parts = [];
+  if (j && j.result) parts.push(String(j.result).trim());
+  if (j && j.api_error_status) parts.push("api status " + j.api_error_status);
+  if (r.err) parts.push(String(r.err).trim());
+  if (!parts.length && r.out) parts.push(String(r.out).trim());
+  return (parts.join(" | ") || "no output").slice(0, 600);
+}
+function noteFailure(kind) {
+  consecutiveFailures++;
+  if (consecutiveFailures >= FAIL_LIMIT) {
+    offlineUntil = Date.now() + OFFLINE_MS;
+    offlineReason = kind === "auth" ? "claude is not logged in" : kind === "limit" ? "usage limit reached" : "claude -p keeps failing";
+    audit({ type: "offline", reason: offlineReason, until: offlineUntil });
+  }
+}
+function noteSuccess() { consecutiveFailures = 0; offlineUntil = 0; offlineReason = ""; }
+
+// ---------------------------------------------------------------- implicit labels
+// The audit has no ratings: nobody clicks "good" or "bad". What the human did next is a label that costs nothing:
+// when their next message arrives, record how it relates to the draft (same, edited, different, or no draft at
+// all) and how long they took. Only the relation and timing are stored, never the text.
+const norm = (t) => String(t || "").toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+function similarity(a, b) {
+  const A = new Set(norm(a).split(" ").filter(Boolean)), B = new Set(norm(b).split(" ").filter(Boolean));
+  if (!A.size || !B.size) return 0;
+  let n = 0;
+  for (const w of A) if (B.has(w)) n++;
+  return n / (A.size + B.size - n);
+}
+function observe(sessions, ctxOf) {
+  const live = new Set(sessions.map((s) => s.id));
+  let changed = false;
+  for (const d of Object.values(drafts)) {
+    if (d.error || d.next || !live.has(d.id)) continue;
+    const c = ctxOf(d.id) || {};
+    if (!c.promptAt || c.promptAt <= (d.since || 0)) continue; // the human has not written since that waiting turn
+    let relation, sim = 0;
+    if (d.sent && d.sentAt && Math.abs(c.promptAt - d.sentAt) < 120e3) relation = "sent_draft"; // that message was ours
+    else if (!d.reply) relation = "no_draft";
+    else { sim = similarity(d.reply, c.prompt); relation = sim >= 0.9 ? "same" : sim >= 0.5 ? "edited" : "different"; }
+    d.next = { at: c.promptAt, waitMs: c.promptAt - (d.since || 0), relation, similarity: +sim.toFixed(2) };
+    changed = true;
+    audit({ type: "implicit_label", key: d.key, id: d.id, label: d.label, action: d.action, wouldSend: !!d.wouldSend, relation, similarity: d.next.similarity, waitMs: d.next.waitMs });
+  }
+  if (changed) saveDrafts();
+}
+
 // Called on every dashboard snapshot. Queues a draft for each waiting turn not drafted yet.
 function consider(sessions, ctxOf, now) {
   if (!ACTIVE) return;
   const pol = policy();
+  observe(sessions, ctxOf);
   if (pol.mode === "off") return;
-  const today = Object.values(drafts).filter((d) => now - (d.at || 0) < DAY).length + running + jobs.length;
+  if (now < offlineUntil) return; // offline: see the breaker above
+  // Only drafts that were really produced use up the day's budget; failures do not.
+  const today = Object.values(drafts).filter((d) => !d.error && now - (d.at || 0) < DAY).length + running + jobs.length;
   let budget = Math.max(0, pol.maxDraftsPerDay - today);
   for (const s of sessions) {
     if (!budget) break;
     if (!eligible(s, now, pol)) continue;
     const key = keyOf(s);
-    if (drafts[key] || queued.has(key)) continue;
+    const prev = drafts[key];
+    if (queued.has(key) || (prev && !prev.error)) continue;
+    // a failed draft is retried after a backoff, up to MAX_TRIES times
+    if (prev && prev.error && ((prev.tries || 1) >= MAX_TRIES || now - (prev.at || 0) < backoffMs(prev.tries || 1))) continue;
     queued.add(key);
-    jobs.push({ key, s, ctx: ctxOf(s.id) || {} });
+    jobs.push({ key, s, ctx: ctxOf(s.id) || {}, tries: prev && prev.error ? prev.tries || 1 : 0 });
     budget--;
   }
   pump();
@@ -122,7 +193,8 @@ const SYSTEM = [
 
 function buildPrompt(job, pol) {
   const s = job.s, c = job.ctx;
-  const cap = (t, n) => { t = String(t || ""); return t.length > n ? t.slice(0, n) + " [cut]" : t; };
+  // A long agent reply ends with what it is asking, so cut the middle and keep the start and the end.
+  const cap = (t, n) => { t = String(t || ""); if (t.length <= n) return t; const head = Math.floor(n * 0.3); return t.slice(0, head) + "\n[... cut ...]\n" + t.slice(-(n - head)); };
   const rules = pol.rules.map((r) => `${r.id}: "${r.text}" (${r.source})`).join("\n");
   const human = pol.alwaysHuman.map((x) => "- " + x).join("\n");
   const ask = c.ask ? JSON.stringify(c.ask).slice(0, 4000) : "";
@@ -179,10 +251,13 @@ async function draft(job, pol) {
   let j = null, o = null;
   try { j = JSON.parse(r.out); o = j.structured_output || JSON.parse(j.result); } catch {}
   if (!o) {
-    const d = { ...base, error: (r.err || r.out || "no output").slice(0, 300), ms: Date.now() - started };
+    const kind = failureKind(r, j);
+    const d = { ...base, error: describeFailure(r, j), errorKind: kind, tries: (job.tries || 0) + 1, ms: Date.now() - started };
     drafts[job.key] = d; saveDrafts(); audit({ type: "error", ...d });
+    noteFailure(kind);
     return;
   }
+  noteSuccess();
   // Shadow decision: would this reply go out without him? Every condition must hold.
   const why = [];
   const rule = pol.rules.find((x) => x.id === String(o.rule || "").trim());
@@ -239,6 +314,7 @@ function state(now) {
   const ws = rated.filter((d) => d.wouldSend);
   return {
     mode: pol.mode, model: pol.model, minConfidence: pol.minConfidence, policyError: pol.error || "",
+    offline: now < offlineUntil ? { until: offlineUntil, reason: offlineReason } : null, consecutiveFailures,
     policyPath: POLICY, auditPath: AUDIT,
     rules: pol.rules, alwaysHuman: pol.alwaysHuman, hold: pol.hold,
     counts: {
@@ -270,4 +346,5 @@ function markSent(key, text) {
   return true;
 }
 
-module.exports = { start, consider, draftFor, rate, redraft, state, policy, getDraft, markSent };
+module.exports = { start, consider, draftFor, rate, redraft, state, policy, getDraft, markSent,
+  internals: { failureKind, describeFailure, similarity, backoffMs, observe } };
